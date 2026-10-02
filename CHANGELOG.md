@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4 — 2026-10-02
+
+- Fix “Summarize older groups” skipping the newest eligible older exchange; with only one eligible exchange it previously selected nothing. The latest exchange remains protected by the host's group metadata.
+- Clarify summary-model routing and remove misleading “selected model” text from the progress message.
+- Add regression coverage for bulk selection and the summary request's route and compaction purpose. Allow the client suite to run against a packed release.
+- Document complementary plugin approaches and distinguish tested behavior from future improvements.
+
 ## 0.1.3 — 2026-10-02
 
 First public version, following local development builds.

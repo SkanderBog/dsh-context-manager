@@ -98,12 +98,16 @@ test('inspection groups balanced tools, distinguishes reasoning, and protects in
 
 test('preview makes a tool-free summary, excludes reasoning, and leaves model context unchanged', async t => {
   const f = await fixture(t)
+  f.agent.options = { provider: 'unused-composer-provider', model: 'unused-composer-model' }
   const before = f.session.snapshotEvents()
   const plan = await f.manager.preview(f.agent, f.selection(), signal())
   assert.deepEqual(f.session.snapshotEvents(), before)
   assert(plan.after < plan.before)
   assert.equal(f.calls.length, 1)
   assert.equal(f.calls[0].tools, undefined)
+  assert.equal(f.calls[0].provider, 'test', 'Use the most recently routed request')
+  assert.equal(f.calls[0].model, 'fixture')
+  assert.equal(f.calls[0].purpose, 'compaction', 'Allow host summarizer routing to recognize this request')
   assert(!JSON.stringify(f.calls).includes('PRIVATE_REASONING_SENTINEL'))
   assert(JSON.stringify(f.calls).includes('FILE_CONTENT_SENTINEL'))
 })

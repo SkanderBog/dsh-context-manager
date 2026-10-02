@@ -20,7 +20,7 @@ test('Context panel requires a reviewed preview, consumes failed apply, and refr
   dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true }
   const components = new Map(), cleanups = [], commands = []
   let plugin
-  vm.runInNewContext(await readFile(new URL('../src/client.js', import.meta.url), 'utf8'), {
+  vm.runInNewContext(await readFile(process.env.DSH_CONTEXT_CLIENT_ENTRY ?? new URL('../src/client.js', import.meta.url), 'utf8'), {
     window: { __ModuleLoader__: { load: entry => { plugin = entry.factory(require) } } },
     document: dom.window.document, Intl, AbortController, Map, JSON, Math,
   })
@@ -55,6 +55,11 @@ test('Context panel requires a reviewed preview, consumes failed apply, and refr
   assert.match(document.body.textContent, /1,600 tokens/)
   assert(document.querySelector('select[aria-label="Action for history 2"]').disabled)
   const select = document.querySelector('select[aria-label="Action for history 1"]')
+  await click('Summarize older groups')
+  assert.equal(select.value, 'summarize', 'The only eligible older exchange must be selected')
+  assert.equal(document.querySelector('select[aria-label="Action for history 2"]').value, 'keep', 'The latest exchange stays protected')
+  await click('Keep all')
+  assert.equal(select.value, 'keep')
   await act(async () => { select.value = 'omit'; select.dispatchEvent(new Event('change', { bubbles: true })) })
   await click('Generate preview')
   assert.equal(commands.find(c => c.op === 'preview').choices['1'], 'omit')

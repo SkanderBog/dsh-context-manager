@@ -68,11 +68,11 @@ window.__ModuleLoader__.load({
       }, [])
       const choose = (id, action) => { invalidate(); setChoices(values => ({ ...values, [id]: action })); setNotice('') }
       const selectOlder = () => {
-        invalidate()
+        invalidate(); setNotice('')
         const eligible = snapshot.groups.filter(g => !g.locked)
-        setChoices(Object.fromEntries(eligible.slice(0, Math.max(0, eligible.length - 1)).map(g => [g.id, 'summarize'])))
+        setChoices(Object.fromEntries(eligible.map(g => [g.id, 'summarize'])))
       }
-      const preview = () => run('Preparing preview with your selected model…', async signal => {
+      const preview = () => run('Preparing summary preview…', async signal => {
         invalidate(); setNotice('')
         const value = await request({ op: 'preview', fingerprint: snapshot.fingerprint, choices, outputs }, signal)
         if (mounted.current) { currentPlan.current = value; setPlan(value); setReviewed(false) }

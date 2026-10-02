@@ -10,7 +10,7 @@ A standalone plugin for DeepSeek Harness 0.2.0-rc.2 or later. Adds a **Context**
 4. Choose whether summaries should summarize, retain the original text of, or omit recorded tool/file outputs.
 5. Generate a preview. Review the exact replacement text and estimated token change, check the review box, and apply.
 
-Summaries use the conversation's most recently routed model and may incur normal model usage. An omission-only preview does not call the model. A preview makes no change to active context. It expires after ten minutes, a new preview, plugin reload, or a change to the conversation. Apply is permitted only while the agent is idle.
+Summary requests start with the conversation's most recently routed model and may incur normal model usage. A host plugin can reroute requests marked `purpose: 'compaction'` to a dedicated summarizer. Changing an unsent composer selection alone does not set the summary model. An omission-only preview does not call the model. A preview makes no change to active context. It expires after ten minutes, a new preview, plugin reload, or a change to the conversation. Apply is permitted only while the agent is idle.
 
 **Keep applies to this operation. It is not a permanent pin against Harness's automatic compaction.** Existing automatic compaction is left in place.
 
@@ -34,7 +34,7 @@ The context total uses Harness's token meter. Category estimates use its fixed t
 ## Install a packaged release
 
 ```sh
-dsh plugin --profile tauri add /absolute/path/dsh-context-manager-0.1.3.tgz
+dsh plugin --profile tauri add /absolute/path/dsh-context-manager-0.1.4.tgz
 ```
 
 Use your actual Harness profile name. The community Linux desktop uses `tauri` on the tested installation. Other Harness desktop distributions may use `desktop`; quit that desktop before changing its reserved profile. Restart Harness after updating the plugin: reloading the frontend or toggling a component can leave the previously imported host module cached.
@@ -60,3 +60,13 @@ Control commands use Harness's existing authenticated command route. Their recor
 ## Failure handling
 
 Apply checks persistence before changing context and flushes again afterward. A final disk error is reported as **changed in memory, saving failed**. A multi-range append failure reports how many ranges were applied. The preview is consumed once committing starts so an uncertain operation is never automatically retried. Refresh and inspect the current session after such an error.
+
+## Related plugins and improvement directions
+
+Source review on 2026-10-02 identified useful complementary approaches:
+
+- [dsh-auxiliary](https://github.com/dsh-plugins/dsh-auxiliary/blob/main/src/compact-router.ts) routes `purpose: 'compaction'` requests to a separate model. This plugin already marks summary calls that way; its automated tests check the marker and original route. Live interoperability with that router has not been tested.
+- [Context Compression Selector](https://github.com/WilliamShi666/dsh-context-compression-selector) offers automatic tool-output reduction and model-specific token accounting. Its explicit distinction between tokenizer counts, estimates, and unavailable counts is a useful direction for improving this panel's approximate breakdown. No tokenizer or reducer from that project is bundled here.
+- [dsh-context-management](https://github.com/overact/dsh-context-management) provides history recall and session notes alongside automatic compaction. Read-only retrieval of original messages would be a useful future addition here; retaining the log does not currently give the model a recall tool.
+
+These are separate capabilities, not a tested compatibility matrix. This plugin remains a manual, reviewed compaction interface. Automatic policy, precise provider accounting, permanent pins, history recall tools, and undo remain future work.
