@@ -50,10 +50,11 @@ Requires Node.js 22.19+ and the matching Harness packages. The plugin has no add
 ```sh
 npm ci
 npm run check
+npm run test:package
 npm pack
 ```
 
-Tests use Harness's real Session, token meter, compaction invariant companion, AgentLoop, command registry, and JSONL persistence with synthetic history and a controlled model. They cover retained reasoning, balanced tool pairs, selective ranges, read-only preview, cancellation, stale plans, save failures, and replay without the plugin. They do not measure the quality of a real model's summary.
+Tests use Harness's real Session, token meter, compaction invariant companion, AgentLoop, command registry, and JSONL persistence with synthetic history and a controlled model. They cover retained reasoning, balanced tool pairs, selective ranges, read-only preview, cancellation, stale plans, save failures, and replay without the plugin. The package check validates the archive's exact public file list and reruns the host and browser suites against its extracted entries. They do not measure the quality of a real model's summary.
 
 Control commands use Harness's existing authenticated command route. Their records stay outside model context. While installed, the plugin hides inspection/preview payloads from ordinary chat cards and displays a short successful-compaction record. Original control records remain in the session log.
 

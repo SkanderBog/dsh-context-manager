@@ -19,8 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-The compaction transaction and lock protocol follow the MIT-licensed DeepSeek
-Harness implementation, Copyright (c) 2026 DeepSeek. The same MIT terms above
-apply to any adapted portions. Harness packages are supplied by the host and
-are not redistributed inside this plugin archive.
