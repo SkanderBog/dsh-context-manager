@@ -27,7 +27,8 @@
     "src",
     "cordis.patch.yml",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "dsh": {
     "bundle": {
@@ -44,6 +45,7 @@
   "scripts": {
     "test": "node test/all.mjs",
     "check": "npm run build && node --check src/client.js && npm test",
+    "test:package": "npm run build && node scripts/check-package.mjs",
     "build": "node scripts/build.mjs",
     "prepack": "npm run build"
   },

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Test the exact packed host and browser entries in CI and reject unexpected release files.
+- Keep the MIT license text canonical and move adapted-code attribution into the packaged `NOTICE` file.
+
 ## 0.1.4 — 2026-10-02
 
 - Fix “Summarize older groups” skipping the newest eligible older exchange; with only one eligible exchange it previously selected nothing. The latest exchange remains protected by the host's group metadata.

@@ -1,3 +1,4 @@
 /node_modules
 *.tgz
 validation/
+.context-package-check-*/
