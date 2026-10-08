@@ -14,8 +14,10 @@ import Commands from '@deepseek-ai/dsh-commands'
 import JsonlPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-const plugin = await import(process.env.DSH_CONTEXT_PLUGIN_ENTRY ?? '../src/index.mjs')
+import { join, isAbsolute } from 'node:path'
+import { pathToFileURL } from 'node:url'
+const entry = process.env.DSH_CONTEXT_PLUGIN_ENTRY ?? '../src/index.mjs'
+const plugin = await import(isAbsolute(entry) ? pathToFileURL(entry).href : entry)
 import { createUserMessage, createSystemMessage, createAssistantMessage, createToolResultMessage } from '@deepseek-ai/dsh-llm'
 import { toolPairingBalancedAfter } from '@deepseek-ai/dsh-compaction'
 const { ContextManager, fingerprint } = plugin
