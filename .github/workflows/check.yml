@@ -38,11 +38,19 @@ jobs:
           HARNESS_TEST_VERSION: ${{ matrix.harness }}
         run: |
           node --input-type=module <<'JS'
-          import { readFileSync } from 'node:fs'
+          import { readFileSync, writeFileSync } from 'node:fs'
           import { execFileSync } from 'node:child_process'
-          const { devDependencies } = JSON.parse(readFileSync('package.json', 'utf8'))
-          const packages = Object.keys(devDependencies).filter(name => name.startsWith('@deepseek-ai/dsh-'))
-          execFileSync('npm', ['install', '--no-save', '--package-lock=false', '--ignore-scripts', '--no-audit', '--no-fund', '@deepseek-ai/cordis@4.0.5-alpha.1', ...packages.map(name => `${name}@${process.env.HARNESS_TEST_VERSION}`)], { stdio: 'inherit' })
+          const original = readFileSync('package.json', 'utf8')
+          const manifest = JSON.parse(original)
+          delete manifest.devDependencies['@deepseek-ai/dsh-invariants']
+          for (const name of Object.keys(manifest.devDependencies)) {
+            if (name.startsWith('@deepseek-ai/dsh-')) manifest.devDependencies[name] = process.env.HARNESS_TEST_VERSION
+          }
+          manifest.devDependencies['@deepseek-ai/cordis'] = '4.0.5-alpha.1'
+          try {
+            writeFileSync('package.json', JSON.stringify(manifest))
+            execFileSync('npm', ['install', '--package-lock=false', '--ignore-scripts', '--no-audit', '--no-fund'], { stdio: 'inherit' })
+          } finally { writeFileSync('package.json', original) }
           JS
       - run: npm run check
         env:

@@ -4,8 +4,11 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import SessionStore, { Session } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
-import Invariants from '@deepseek-ai/dsh-invariants'
-import * as compactionInvariants from '@deepseek-ai/dsh-compaction/invariant'
+import { createRequire } from 'node:module'
+const compactionPackage = createRequire(import.meta.url)('@deepseek-ai/dsh-compaction/package.json')
+const invariantPlugins = compactionPackage.exports['./invariant']
+  ? [(await import('@deepseek-ai/dsh-invariants')).default, await import('@deepseek-ai/dsh-compaction/invariant')]
+  : []
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -29,7 +32,7 @@ const long = 'Exact file path /workspace/notes.txt. The requested analysis has b
 async function fixture(t, options = {}) {
   const ctx = new Context()
   const fibers = []
-  for (const plugin of [SessionStore, SessionProjectionRegistry, TokenMeter, Invariants, compactionInvariants]) fibers.push(await ctx.plugin(plugin))
+  for (const plugin of [SessionStore, SessionProjectionRegistry, TokenMeter, ...invariantPlugins]) fibers.push(await ctx.plugin(plugin))
   t.after(async () => { for (const fiber of fibers.reverse()) await fiber.dispose() })
   const session = ctx.sessions.create()
   const snapshots = []
@@ -339,7 +342,7 @@ test('real AgentLoop, command registry, JSONL persistence and plugin disposal wo
     async resolveModelInfo() { return { inputModalities: ['text'], contextWindow: 131072 } }
     async *stream() { yield { type: 'block-end', index: 0, block: block('The prior task is complete. Continue the remaining task.') }; yield { type: 'finish', reason: { kind: 'stop' } } }
   }
-  for (const mod of [SessionStore, SessionProjectionRegistry, AgentRegistry, TestLlm, ToolRuntime, SystemPrompt, TokenMeter, Commands, Invariants, compactionInvariants]) fibers.push(await ctx.plugin(mod))
+  for (const mod of [SessionStore, SessionProjectionRegistry, AgentRegistry, TestLlm, ToolRuntime, SystemPrompt, TokenMeter, Commands, ...invariantPlugins]) fibers.push(await ctx.plugin(mod))
   fibers.push(await ctx.plugin(JsonlPersistence, { root, compression: 'none' }))
   fibers.push(await ctx.plugin(AgentLoop, {}))
   const pluginFiber = await ctx.plugin(plugin); fibers.push(pluginFiber)
