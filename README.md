@@ -85,3 +85,9 @@ npm run test:installed -- /absolute/runtime/root /absolute/profile/root /absolut
 ```
 
 The profile must already contain Rewind, Better Sidebar and DSH Market. The script reads their packages and uses Harness's own module-resolution service, then creates scratch sessions, snapshots, attachments and market storage. It does not boot the live profile or read its conversations. Model responses, settings UI, loader inventory and web-runtime metadata are controlled fixtures; session, command, tool, persistence, HTTP routing and plugin code are real. A temporary loopback server is closed on completion. No paid model request or package-manager mutation is made.
+
+### Compatibility and resource checks
+
+All selected summary ranges are checked against the transcript limit before the first model request. An oversized later range therefore leaves history unchanged without charging an earlier summary request. Omit-only ranges do not require a model or summary transcript.
+
+CI tests packed host and browser artifacts on Linux, macOS and Windows. The pinned baseline is Harness `0.2.0-rc.2`; an additional Linux/Node 24 lane exercises `0.2.1-alpha.1` without changing the release dependency pins. These are plugin/runtime checks, not packaged desktop GUI tests.

@@ -4,8 +4,11 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import SessionStore, { Session } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
-import Invariants from '@deepseek-ai/dsh-invariants'
-import * as compactionInvariants from '@deepseek-ai/dsh-compaction/invariant'
+import { createRequire } from 'node:module'
+const compactionPackage = createRequire(import.meta.url)('@deepseek-ai/dsh-compaction/package.json')
+const invariantPlugins = compactionPackage.exports['./invariant']
+  ? [(await import('@deepseek-ai/dsh-invariants')).default, await import('@deepseek-ai/dsh-compaction/invariant')]
+  : []
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -14,8 +17,10 @@ import Commands from '@deepseek-ai/dsh-commands'
 import JsonlPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-const plugin = await import(process.env.DSH_CONTEXT_PLUGIN_ENTRY ?? '../src/index.mjs')
+import { join, isAbsolute } from 'node:path'
+import { pathToFileURL } from 'node:url'
+const entry = process.env.DSH_CONTEXT_PLUGIN_ENTRY ?? '../src/index.mjs'
+const plugin = await import(isAbsolute(entry) ? pathToFileURL(entry).href : entry)
 import { createUserMessage, createSystemMessage, createAssistantMessage, createToolResultMessage } from '@deepseek-ai/dsh-llm'
 import { toolPairingBalancedAfter } from '@deepseek-ai/dsh-compaction'
 const { ContextManager, fingerprint } = plugin
@@ -27,7 +32,7 @@ const long = 'Exact file path /workspace/notes.txt. The requested analysis has b
 async function fixture(t, options = {}) {
   const ctx = new Context()
   const fibers = []
-  for (const plugin of [SessionStore, SessionProjectionRegistry, TokenMeter, Invariants, compactionInvariants]) fibers.push(await ctx.plugin(plugin))
+  for (const plugin of [SessionStore, SessionProjectionRegistry, TokenMeter, ...invariantPlugins]) fibers.push(await ctx.plugin(plugin))
   t.after(async () => { for (const fiber of fibers.reverse()) await fiber.dispose() })
   const session = ctx.sessions.create()
   const snapshots = []
@@ -337,7 +342,7 @@ test('real AgentLoop, command registry, JSONL persistence and plugin disposal wo
     async resolveModelInfo() { return { inputModalities: ['text'], contextWindow: 131072 } }
     async *stream() { yield { type: 'block-end', index: 0, block: block('The prior task is complete. Continue the remaining task.') }; yield { type: 'finish', reason: { kind: 'stop' } } }
   }
-  for (const mod of [SessionStore, SessionProjectionRegistry, AgentRegistry, TestLlm, ToolRuntime, SystemPrompt, TokenMeter, Commands, Invariants, compactionInvariants]) fibers.push(await ctx.plugin(mod))
+  for (const mod of [SessionStore, SessionProjectionRegistry, AgentRegistry, TestLlm, ToolRuntime, SystemPrompt, TokenMeter, Commands, ...invariantPlugins]) fibers.push(await ctx.plugin(mod))
   fibers.push(await ctx.plugin(JsonlPersistence, { root, compression: 'none' }))
   fibers.push(await ctx.plugin(AgentLoop, {}))
   const pluginFiber = await ctx.plugin(plugin); fibers.push(pluginFiber)
@@ -367,4 +372,42 @@ test('real AgentLoop, command registry, JSONL persistence and plugin disposal wo
   await pluginFiber.dispose(); fibers.pop()
   assert.equal(ctx.commands.find(agent, 'context-manager'), undefined)
   assert.deepEqual(restored.deriveMessages(), agent.session.deriveMessages())
+})
+
+test('oversized later summary spans are rejected before any model request', async t => {
+  const f = await fixture(t)
+  f.user('Oversized older request ' + 'x'.repeat(600001))
+  f.assistant([block('Large request response.')])
+  f.user('Latest request must stay intact.')
+  const view = f.inspect()
+  const older = view.groups.filter(group => !group.locked)
+  const oversized = older.find(group => group.excerpt.startsWith('Oversized older request'))
+  assert(oversized)
+  const request = { fingerprint: view.fingerprint, choices: { [older[0].id]: 'summarize', [oversized.id]: 'summarize' }, outputs: 'summarize' }
+  const before = f.session.snapshotEvents()
+  await assert.rejects(f.manager.preview(f.agent, request, signal()), /too large/)
+  assert.equal(f.calls.length, 0, 'Invalid selection must not incur an earlier model request')
+  assert.equal(f.manager.plans.size, 0)
+  assert.deepEqual(f.session.snapshotEvents(), before)
+})
+
+test('separate valid summaries still make one model request per selected span', async t => {
+  const f = await fixture(t)
+  const before = f.session.snapshotEvents()
+  const plan = await f.manager.preview(f.agent, f.selection(['summarize', 'keep', 'summarize']), signal())
+  assert.equal(f.calls.length, 2)
+  assert.equal(plan.replacements.length, 2)
+  assert.deepEqual(f.session.snapshotEvents(), before)
+})
+
+test('oversized omission does not require a transcript or a model request', async t => {
+  const f = await fixture(t)
+  f.user('Oversized omitted request ' + 'x'.repeat(600001))
+  f.user('Keep the latest request.')
+  const view = f.inspect()
+  const oversized = view.groups.find(group => group.excerpt.startsWith('Oversized omitted request'))
+  const plan = await f.manager.preview(f.agent, { fingerprint: view.fingerprint, choices: { [oversized.id]: 'omit' }, outputs: 'summarize' }, signal())
+  assert.equal(f.calls.length, 0)
+  assert.equal(plan.replacements.length, 1)
+  assert.equal(plan.replacements[0].action, 'omit')
 })
