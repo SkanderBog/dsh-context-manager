@@ -46,6 +46,7 @@
     "test": "node test/all.mjs",
     "check": "npm run build && node --check src/client.js && npm test",
     "test:package": "npm run build && node scripts/check-package.mjs",
+    "test:installed": "npm run build && node scripts/check-installed.mjs",
     "build": "node scripts/build.mjs",
     "prepack": "npm run build"
   },

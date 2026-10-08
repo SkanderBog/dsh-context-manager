@@ -129,7 +129,12 @@ window.__ModuleLoader__.load({
         const pressure = useProjection('contextPressure')
         const tokens = pressure?.projectedTokens ?? pressure?.pressureTokens
         const percent = pressure?.contextWindow && tokens !== undefined ? Math.round(tokens / pressure.contextWindow * 100) : null
-        useEffect(() => { const openPanel = () => setOpen(true); listeners.set(sessionId, openPanel); return () => { if (listeners.get(sessionId) === openPanel) listeners.delete(sessionId) } }, [sessionId])
+        useEffect(() => {
+          const openPanel = () => setOpen(true)
+          const views = listeners.get(sessionId) ?? new Set()
+          views.add(openPanel); listeners.set(sessionId, views)
+          return () => { views.delete(openPanel); if (!views.size) listeners.delete(sessionId) }
+        }, [sessionId])
         return h(React.Fragment, null, h('button', { className: 'dcm-open', onClick: () => setOpen(true), title: 'Inspect and manage conversation context' }, 'Context', percent !== null ? ` ${percent}%` : ''), open && h(ContextPanel, { key: sessionId, ctx, sessionId, close: () => setOpen(false), updateMeter: () => {} }))
       }
       function CommandCard({ node }) {
@@ -145,7 +150,7 @@ window.__ModuleLoader__.load({
         yield () => { style.remove(); listeners.clear() }
         yield ctx.slots.inject('conversation.session.header.actions', () => ctx.slots.register({ name: 'conversation.session.header.actions', id: 'dsh-context-manager', order: 500 }, HeaderAction))
         yield ctx.slots.inject('conversation.chat.commandview', () => ctx.slots.register({ name: 'conversation.chat.commandview', key: 'context-manager' }, CommandCard))
-        yield ctx.commandUi.decorate({ name: 'context-manager', available: session => listeners.has(session.sessionId), ui: { kind: 'action', run: session => listeners.get(session.sessionId)?.() } })
+        yield ctx.commandUi.decorate({ name: 'context-manager', available: session => listeners.has(session.sessionId), ui: { kind: 'action', run: session => listeners.get(session.sessionId)?.values().next().value?.() } })
       }, 'context manager client')
     }
     return { name: 'dsh-context-manager', inject: ['slots', 'remote', 'remote.commands', 'commandUi'], apply }

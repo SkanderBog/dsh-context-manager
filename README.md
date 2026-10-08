@@ -60,6 +60,8 @@ Control commands use Harness's existing authenticated command route. Their recor
 
 ## Failure handling
 
+If Rewind or another plugin replaces the active history or changes its request route while a summary is streaming, the preview cancels the obsolete model request. It ignores unrelated sessions and non-context events. The fingerprint is still checked before publishing and applying a preview. Multiple views of the same session keep separate registrations, so closing one view does not disable the remaining view's Context command.
+
 Apply checks persistence before changing context and flushes again afterward. A final disk error is reported as **changed in memory, saving failed**. A multi-range append failure reports how many ranges were applied. The preview is consumed once committing starts so an uncertain operation is never automatically retried. Refresh and inspect the current session after such an error.
 
 ## Related plugins and improvement directions
@@ -70,4 +72,16 @@ Source review on 2026-10-02 identified useful complementary approaches:
 - [Context Compression Selector](https://github.com/WilliamShi666/dsh-context-compression-selector) offers automatic tool-output reduction and model-specific token accounting. Its explicit distinction between tokenizer counts, estimates, and unavailable counts is a useful direction for improving this panel's approximate breakdown. No tokenizer or reducer from that project is bundled here.
 - [dsh-context-management](https://github.com/overact/dsh-context-management) provides history recall and session notes alongside automatic compaction. Read-only retrieval of original messages would be a useful future addition here; retaining the log does not currently give the model a recall tool.
 
-These are separate capabilities, not a tested compatibility matrix. This plugin remains a manual, reviewed compaction interface. Automatic policy, precise provider accounting, permanent pins, history recall tools, and undo remain future work.
+These three projects have not been tested for live interoperability. This plugin remains a manual, reviewed compaction interface. Automatic policy, precise provider accounting, permanent pins, history recall tools, and undo remain future work.
+
+## Installed-plugin compatibility check
+
+The 2026-10-08 check used the real Harness `0.2.0-rc.2` services with Rewind `0.15.0`, Better Sidebar `0.24.1`, DSH Market `1.66.6`, and the companion PDF Reader checkout. It exercised stale-preview rejection after rewind, cancelling a streaming summary on rewind, durable compaction, PDF text/image delivery and independent plugin disposal. Market coverage is its route registration and read-only capabilities endpoint; package installation/update operations and the third-party browser interfaces are not exercised. See [VALIDATION.md](VALIDATION.md) for the desktop-version boundary.
+
+To repeat against explicit local installations, with Poppler available:
+
+```sh
+npm run test:installed -- /absolute/runtime/root /absolute/profile/root /absolute/pdf-reader/checkout
+```
+
+The profile must already contain Rewind, Better Sidebar and DSH Market. The script reads their packages and uses Harness's own module-resolution service, then creates scratch sessions, snapshots, attachments and market storage. It does not boot the live profile or read its conversations. Model responses, settings UI, loader inventory and web-runtime metadata are controlled fixtures; session, command, tool, persistence, HTTP routing and plugin code are real. A temporary loopback server is closed on completion. No paid model request or package-manager mutation is made.
