@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Validate every selected summary range before the first model request, avoiding wasted requests when a later range is oversized.
+- Test packed artifacts on Linux, macOS and Windows, with Node 22/24 and an additional Harness 0.2.1-alpha.1 lane.
+
+## Unreleased
+
 - Test the exact packed host and browser entries in CI and reject unexpected release files.
 - Keep the MIT license text canonical and move adapted-code attribution into the packaged `NOTICE` file.
 

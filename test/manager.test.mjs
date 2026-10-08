@@ -368,3 +368,41 @@ test('real AgentLoop, command registry, JSONL persistence and plugin disposal wo
   assert.equal(ctx.commands.find(agent, 'context-manager'), undefined)
   assert.deepEqual(restored.deriveMessages(), agent.session.deriveMessages())
 })
+
+test('oversized later summary spans are rejected before any model request', async t => {
+  const f = await fixture(t)
+  f.user('Oversized older request ' + 'x'.repeat(600001))
+  f.assistant([block('Large request response.')])
+  f.user('Latest request must stay intact.')
+  const view = f.inspect()
+  const older = view.groups.filter(group => !group.locked)
+  const oversized = older.find(group => group.excerpt.startsWith('Oversized older request'))
+  assert(oversized)
+  const request = { fingerprint: view.fingerprint, choices: { [older[0].id]: 'summarize', [oversized.id]: 'summarize' }, outputs: 'summarize' }
+  const before = f.session.snapshotEvents()
+  await assert.rejects(f.manager.preview(f.agent, request, signal()), /too large/)
+  assert.equal(f.calls.length, 0, 'Invalid selection must not incur an earlier model request')
+  assert.equal(f.manager.plans.size, 0)
+  assert.deepEqual(f.session.snapshotEvents(), before)
+})
+
+test('separate valid summaries still make one model request per selected span', async t => {
+  const f = await fixture(t)
+  const before = f.session.snapshotEvents()
+  const plan = await f.manager.preview(f.agent, f.selection(['summarize', 'keep', 'summarize']), signal())
+  assert.equal(f.calls.length, 2)
+  assert.equal(plan.replacements.length, 2)
+  assert.deepEqual(f.session.snapshotEvents(), before)
+})
+
+test('oversized omission does not require a transcript or a model request', async t => {
+  const f = await fixture(t)
+  f.user('Oversized omitted request ' + 'x'.repeat(600001))
+  f.user('Keep the latest request.')
+  const view = f.inspect()
+  const oversized = view.groups.find(group => group.excerpt.startsWith('Oversized omitted request'))
+  const plan = await f.manager.preview(f.agent, { fingerprint: view.fingerprint, choices: { [oversized.id]: 'omit' }, outputs: 'summarize' }, signal())
+  assert.equal(f.calls.length, 0)
+  assert.equal(plan.replacements.length, 1)
+  assert.equal(plan.replacements[0].action, 'omit')
+})
