@@ -1,5 +1,13 @@
 # Validation — 0.1.4
 
+## Unreleased compatibility fixes — 2026-10-08
+
+- Regression tests first reproduced a lost command registration after closing a second view and an obsolete summary request continuing after a rewind. The fixes retain per-view registrations and abort previews on context-changing session events, with listener cleanup on completion.
+- The updated source and built host tests pass **28 tests**; the package suite also exercises the browser entry extracted from the tarball.
+- `scripts/check-installed.mjs` provides an opt-in composition test against an explicit runtime/profile/PDF checkout. It uses real Harness `0.2.0-rc.2`, Rewind `0.15.0`, Better Sidebar `0.24.1`, and DSH Market `1.66.6`. Both plugin checkouts mount together. Rewind invalidates a completed preview, cancels a streaming preview, and preserves an earlier persisted compaction checkpoint. PDF text extraction and image attachments work with the other plugins present. Unloading these two plugins leaves Rewind's commands and Sidebar's HTTP routes registered. Market's read-only capabilities endpoint responds successfully.
+- The installed desktop was **0.22.3**. The **0.22.4** release tag pins the same `0.2.0-rc.2` session, LLM, tool and conversation UI APIs. This supports host API compatibility; it is not a claim that the packaged 0.22.4 GUI or every bundled desktop plugin was exercised. Third-party browser UIs, Market package mutations and external model providers remain outside this isolated test.
+- The harness uses scratch storage and controlled settings, loader inventory, web-runtime metadata and model replies. It applies the host's real package-resolution interception; ordinary Node imports can otherwise resolve an obsolete global Harness installation and produce false compatibility failures.
+
 ## Isolated update validation
 
 Version 0.1.4 was tested on 2026-10-02 in a separate checkout with Node.js 22.23.2 and Harness 0.2.0-rc.2. The active desktop, its profile, and the linked installed plugin were left untouched.

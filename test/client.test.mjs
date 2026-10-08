@@ -19,7 +19,7 @@ test('Context panel requires a reviewed preview, consumes failed apply, and refr
   for (const name of ['window', 'document', 'HTMLElement', 'HTMLInputElement', 'Event', 'MouseEvent']) { saved.set(name, globalThis[name]); globalThis[name] = dom.window[name] }
   dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true }
   const components = new Map(), cleanups = [], commands = []
-  let plugin
+  let plugin, decoration
   vm.runInNewContext(await readFile(process.env.DSH_CONTEXT_CLIENT_ENTRY ?? new URL('../src/client.js', import.meta.url), 'utf8'), {
     window: { __ModuleLoader__: { load: entry => { plugin = entry.factory(require) } } },
     document: dom.window.document, Intl, AbortController, Map, JSON, Math,
@@ -41,7 +41,7 @@ test('Context panel requires a reviewed preview, consumes failed apply, and refr
       return { ok: true, value: { result: { kind: 'success', text: JSON.stringify({ contextManager: 1, op: request.op, ...value }) } } }
     } } },
     slots: { inject(_name, callback) { return callback() }, register(entry, component) { components.set(entry.name, component); return () => components.delete(entry.name) } },
-    commandUi: { decorate() { return () => {} } },
+    commandUi: { decorate(value) { decoration = value; return () => {} } },
     effect(generator) { for (const cleanup of generator()) cleanups.push(cleanup) },
   }
   plugin.apply(ctx)
@@ -80,4 +80,20 @@ test('Context panel requires a reviewed preview, consumes failed apply, and refr
   assert.equal(commands.filter(c => c.op === 'apply').length, 2)
   await click('Close')
   assert.equal(document.querySelector('dialog'), null)
+
+  const props = { sessionId: 'demo', useProjection: () => null }
+  await act(async () => root.render(React.createElement(React.Fragment, null,
+    React.createElement(Header, { ...props, key: 'main' }),
+    React.createElement(Header, { ...props, key: 'second-view' }))))
+  await act(async () => decoration.ui.run({ sessionId: 'demo' }))
+  assert.equal(document.querySelectorAll('dialog').length, 1, 'A command opens only one view')
+  await click('Close')
+  await act(async () => root.render(React.createElement(React.Fragment, null,
+    React.createElement(Header, { ...props, key: 'main' }))))
+  assert(decoration.available({ sessionId: 'demo' }), 'Unmounting a second view must not disable the remaining view')
+  await act(async () => decoration.ui.run({ sessionId: 'demo' }))
+  assert.equal(document.querySelectorAll('dialog').length, 1)
+  await click('Close')
+  await act(async () => root.render(null))
+  assert.equal(decoration.available({ sessionId: 'demo' }), false)
 })

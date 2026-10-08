@@ -16,6 +16,16 @@ export function fingerprint(session) {
   return digest({ header: session.requestHeader(), route: session.requestContext(), messages: session.surface.nodes.map(seq => [seq, session.deriveEventMessage(session.eventAt(seq))]) })
 }
 
+async function guardPreview(ctx, session, signals, operation) {
+  const changed = new AbortController()
+  const dispose = ctx.on('session/event', (updated, event) => {
+    if (updated.id === session.id && (event.surfaceOp || event.type === 'request/header' || event.type === 'request/context'))
+      changed.abort(new Error('The conversation changed during preview. Refresh and try again.'))
+  })
+  try { return await operation(AbortSignal.any([...signals, changed.signal])) }
+  finally { dispose() }
+}
+
 /** Refuse interrupted locks as well as currently running work. */
 function assertIdle(session) {
   let turn, compaction, seed
@@ -126,8 +136,7 @@ export class ContextManager {
     const session = agent.session
     const original = fingerprint(session)
     if (input.fingerprint !== original) throw new Error('The conversation changed. Refresh and select the groups again.')
-    return agent.runMaintenance(async maintenanceSignal => {
-      const operationSignal = AbortSignal.any([signal, maintenanceSignal])
+    return agent.runMaintenance(maintenanceSignal => guardPreview(this.ctx, session, [signal, maintenanceSignal], async operationSignal => {
       operationSignal.throwIfAborted()
       assertIdle(session)
       const measurement = this.ctx.tokenMeter.measure(session)
@@ -195,7 +204,7 @@ export class ContextManager {
       while (this.plans.size >= 16) this.plans.delete(this.plans.keys().next().value)
       this.plans.set(id, plan)
       return { id, expires: plan.expires, before: plan.before, after: Math.max(0, plan.before - sum(replacements, 'before') + sum(replacements, 'after')), replacements: replacements.map(({ action, seqs, before, after, message }) => ({ action, seqs, before, after, summary: message.content[0].text })) }
-    })
+    }))
   }
 
   discard(agent, id) { const plan = this.plans.get(id); if (plan?.sessionId === agent.session.id) this.plans.delete(id); return { discarded: true } }

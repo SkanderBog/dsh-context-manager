@@ -74,7 +74,7 @@ async function fixture(t, options = {}) {
     active = true
     return Promise.resolve().then(() => task(maintenanceController.signal)).finally(() => { active = false })
   } }
-  const manager = new ContextManager({ sessions: ctx.sessions, tokenMeter: ctx.tokenMeter, llm }, { now: options.now ?? Date.now })
+  const manager = new ContextManager({ on: ctx.on.bind(ctx), sessions: ctx.sessions, tokenMeter: ctx.tokenMeter, llm }, { now: options.now ?? Date.now })
   const inspect = () => manager.inspect(agent)
   const selection = (actions = ['summarize'], outputs = 'summarize') => {
     const view = inspect()
@@ -257,6 +257,35 @@ test('changes during preview invalidate it before a plan is published', async t 
   change = () => f.user('A correction arrived while the summary was running.')
   await assert.rejects(f.manager.preview(f.agent, f.selection(), signal()), /changed during preview/)
   assert.equal(f.manager.plans.size, 0)
+})
+
+test('a rewind during summary generation cancels the model call without waiting for its next chunk', async t => {
+  let rewind
+  const f = await fixture(t, { beforeStream: async request => {
+    rewind()
+    assert(request.signal.aborted, 'A surface replacement must immediately cancel the obsolete model request')
+    request.signal.throwIfAborted()
+  } })
+  rewind = () => {
+    const last = f.session.surface.nodes.at(-1)
+    f.session.append('user/message', createUserMessage({ content: [block('(empty message)')], source: { kind: 'rewind' } }),
+      { surfaceOp: { op: 'replace', startSeq: last, endSeq: last }, sourceEventSeqs: [last] })
+  }
+  await assert.rejects(f.manager.preview(f.agent, f.selection(), signal()), /changed during preview/)
+  assert.equal(f.manager.plans.size, 0)
+})
+
+test('preview guards ignore other sessions and non-context events and detach after completion', async t => {
+  let unrelated
+  const f = await fixture(t, { beforeStream: async request => { unrelated(); assert.equal(request.signal.aborted, false) } })
+  unrelated = () => {
+    f.session.append('command/start', { commandId: 'other-ui-command', name: 'sidebar', rawInput: '' })
+    const other = f.ctx.sessions.create()
+    other.append('user/message', createUserMessage({ content: [block('Another conversation')], source: { kind: 'user' } }), { surfaceOp: 'append' })
+  }
+  await f.manager.preview(f.agent, f.selection(), signal())
+  f.user('After the finished preview')
+  assert.equal(f.calls[0].signal.aborted, false, 'Finished previews must release their listener')
 })
 
 test('Harness instructions stay protected and injected context cannot split protection of the latest request', async t => {
