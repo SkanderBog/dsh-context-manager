@@ -232,6 +232,7 @@ export class ContextManager {
       operationSignal.throwIfAborted()
       assertIdle(session)
       if (fingerprint(session) !== plan.fingerprint) throw new Error('The conversation changed while preparing to save. Generate a new preview.')
+      if (this.plans.get(id) !== plan || plan.expires <= this.now()) throw new Error('Preview expired or was discarded while preparing to save. Generate a new preview.')
       this.plans.delete(id) // Never silently replay an uncertain or partly committed operation.
       let applied = 0, failure
       for (const replacement of plan.replacements) {

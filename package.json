@@ -1,6 +1,6 @@
 {
   "name": "dsh-context-manager",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Preview and selectively compact DeepSeek Harness conversation context",
   "type": "module",
   "license": "MIT",
@@ -13,7 +13,7 @@
     "url": "https://github.com/SkanderBog/dsh-context-manager/issues"
   },
   "engines": {
-    "node": ">=22.19.0",
+    "node": "^22.19.0 || >=24.0.0",
     "dsh": ">=0.2.0-rc.2 || 0.2.1-alpha.1"
   },
   "main": "lib/index.mjs",
@@ -40,6 +40,40 @@
         "@deepseek-ai/dsh-client-ui-commands"
       ],
       "platform": "web"
+    },
+    "pluginType": "feature",
+    "compatibility": {
+      "dsh": "0.2.0-rc.2 || 0.2.1-alpha.1",
+      "dshReleases": {
+        "0.2.0-rc.2": "compatible",
+        "0.2.1-alpha.1": "compatible",
+        "0.2.1-alpha.2": "unknown"
+      },
+      "dshOperations": {
+        "0.2.0-rc.2": {
+          "install": "unknown",
+          "start": "unknown",
+          "uninstall": "unknown",
+          "rollback": "unknown"
+        },
+        "0.2.1-alpha.1": {
+          "install": "unknown",
+          "start": "unknown",
+          "uninstall": "unknown",
+          "rollback": "unknown"
+        },
+        "0.2.1-alpha.2": {
+          "install": "unknown",
+          "start": "unknown",
+          "uninstall": "unknown",
+          "rollback": "unknown"
+        }
+      },
+      "profiles": [
+        "web",
+        "desktop",
+        "custom"
+      ]
     }
   },
   "scripts": {
@@ -84,5 +118,14 @@
     "react-dom": "19.2.8",
     "jsdom": "26.1.0",
     "esbuild": "0.28.2"
-  }
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "context",
+    "compaction",
+    "sessions",
+    "ui",
+    "management"
+  ]
 }

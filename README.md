@@ -10,7 +10,7 @@ A standalone plugin for DeepSeek Harness 0.2.0-rc.2 or later. Adds a **Context**
 4. Choose whether summaries should summarize, retain the original text of, or omit recorded tool/file outputs.
 5. Generate a preview. Review the exact replacement text and estimated token change, check the review box, and apply.
 
-Summary requests start with the conversation's most recently routed model and may incur normal model usage. A host plugin can reroute requests marked `purpose: 'compaction'` to a dedicated summarizer. Changing an unsent composer selection alone does not set the summary model. An omission-only preview does not call the model. A preview makes no change to active context. It expires after ten minutes, a new preview, plugin reload, or a change to the conversation. Apply is permitted only while the agent is idle.
+Summary requests start with the conversation's most recently routed model and may incur normal model usage. A host plugin can reroute requests marked `purpose: 'compaction'` to a dedicated summarizer. Changing an unsent composer selection alone does not set the summary model. An omission-only preview does not call the model. A preview makes no change to active context. It expires after ten minutes, a new preview, plugin reload, or a change to the conversation. Apply is permitted only while the agent is idle. A preview that expires or is discarded while the initial save is pending is rejected before any history changes.
 
 **Keep applies to this operation. It is not a permanent pin against Harness's automatic compaction.** Existing automatic compaction is left in place.
 
@@ -34,7 +34,7 @@ The context total uses Harness's token meter. Category estimates use its fixed t
 ## Install a packaged release
 
 ```sh
-dsh plugin --profile tauri add /absolute/path/dsh-context-manager-0.1.4.tgz
+dsh plugin --profile tauri add /absolute/path/dsh-context-manager-0.1.5.tgz
 ```
 
 Use your actual Harness profile name. The community Linux desktop uses `tauri` on the tested installation. Other Harness desktop distributions may use `desktop`; quit that desktop before changing its reserved profile. Restart Harness after updating the plugin: reloading the frontend or toggling a component can leave the previously imported host module cached.
@@ -91,3 +91,19 @@ The profile must already contain Rewind, Better Sidebar and DSH Market. The scri
 All selected summary ranges are checked against the transcript limit before the first model request. An oversized later range therefore leaves history unchanged without charging an earlier summary request. Omit-only ranges do not require a model or summary transcript.
 
 CI tests packed host and browser artifacts on Linux, macOS and Windows. The pinned baseline is Harness `0.2.0-rc.2`; an additional Linux/Node 24 lane exercises `0.2.1-alpha.1` without changing the release dependency pins. These are plugin/runtime checks, not packaged desktop GUI tests.
+
+
+## Store compatibility and permissions
+
+The manifest includes the Store-specific `dsh.compatibility` matrix as well as the host's `engines.dsh` gate. Exact API compatibility is tested on DSH `0.2.0-rc.2` and `0.2.1-alpha.1`; `0.2.1-alpha.2` remains unknown until its CI lane passes. Linux, macOS and Windows packed-plugin tests exercise host and browser contracts, not packaged desktop GUIs. Web/desktop profiles need the stated conversation and command client modules; headless profiles expose only the command.
+
+| Capability | Scope |
+| --- | --- |
+| Conversation data | Reads the selected session's active history to estimate usage and build a preview. Recorded reasoning is excluded from summary input and client excerpts. |
+| Persistent changes | After the user reviews and applies a preview, writes standard compaction events through Harness session persistence. Original log entries remain. There is no undo button; Keep is not a permanent pin. |
+| Network and cost | Summary generation uses the configured Harness LLM service and may send selected transcript text to its provider and incur usage charges. Omission-only previews make no model request. |
+| Credentials | Uses the host's configured LLM service; does not request, display, or directly read provider credentials. |
+| Files and processes | No direct filesystem, shell, native executable, package installation, Profile modification, or restart API in shipped runtime code. Session persistence is an indirect disk-write effect handled by Harness. |
+| Dependencies | Host-supplied DSH services and React; no bundled native tools, external server, or production npm dependencies. The committed host bundle installs without `prepare` or install hooks; `prepack` is a maintainer packaging step. |
+
+Because this plugin changes active conversation context and can invoke a model, it needs a permission-aware review even if a static scanner does not recognize those host-service effects. Listing, automatic source checks, tests, and independent security review are separate states. CLI install/start/uninstall/rollback operation records remain explicitly unknown unless a disposable-profile report establishes them; ordinary host tests do not establish those operations.
