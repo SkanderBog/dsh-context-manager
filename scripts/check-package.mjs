@@ -11,7 +11,7 @@ try {
   const [packed] = JSON.parse(execFileSync(process.execPath, [process.env.npm_execpath, 'pack', '--ignore-scripts', '--json', '--pack-destination', directory], { cwd: root, encoding: 'utf8' }))
   assert.deepEqual(packed.files.map(file => file.path).sort(), [
     'LICENSE',
-    'NOTICE',
+    'NOTICE.md',
     'README.md',
     'cordis.patch.yml',
     'lib/index.mjs',

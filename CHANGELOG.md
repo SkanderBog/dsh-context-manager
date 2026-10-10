@@ -1,14 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.1.5
+
+- Preserve adapted-code attribution in `NOTICE.md`, a text artifact recognized by the Store scanner.
+
+- Recheck preview identity and expiry after the initial persistence wait so discarded or expired previews cannot change context.
+- Add explicit Store compatibility and permission documentation and a DSH 0.2.1-alpha.2 test lane.
 
 - Validate every selected summary range before the first model request, avoiding wasted requests when a later range is oversized.
 - Test packed artifacts on Linux, macOS and Windows, with Node 22/24 and an additional Harness 0.2.1-alpha.1 lane.
 
-## Unreleased
 
 - Test the exact packed host and browser entries in CI and reject unexpected release files.
-- Keep the MIT license text canonical and move adapted-code attribution into the packaged `NOTICE` file.
+- Keep the MIT license text canonical and move adapted-code attribution into the packaged `NOTICE.md` file.
 
 ## 0.1.4 — 2026-10-02
 

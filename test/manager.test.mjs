@@ -411,3 +411,21 @@ test('oversized omission does not require a transcript or a model request', asyn
   assert.equal(plan.replacements.length, 1)
   assert.equal(plan.replacements[0].action, 'omit')
 })
+
+
+test('discarded or expired previews cannot commit after the initial save', async t => {
+  for (const invalidation of ['discard', 'expire']) {
+    await t.test(invalidation, async t => {
+      let now = 1000
+      const f = await fixture(t, { now: () => now })
+      const plan = await f.manager.preview(f.agent, f.selection(), signal())
+      const before = f.session.snapshotEvents()
+      f.ctx.on('session/flush', () => {
+        if (invalidation === 'discard') f.manager.discard(f.agent, plan.id)
+        else now = plan.expires
+      })
+      await assert.rejects(f.manager.apply(f.agent, plan.id, signal()), /expired|discarded/)
+      assert.deepEqual(f.session.snapshotEvents(), before)
+    })
+  }
+})
