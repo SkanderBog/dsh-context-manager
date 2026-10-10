@@ -28,7 +28,7 @@
     "cordis.patch.yml",
     "README.md",
     "LICENSE",
-    "NOTICE"
+    "NOTICE.md"
   ],
   "dsh": {
     "bundle": {
