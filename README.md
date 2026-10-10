@@ -95,7 +95,7 @@ CI tests packed host and browser artifacts on Linux, macOS and Windows. The pinn
 
 ## Store compatibility and permissions
 
-The manifest includes the Store-specific `dsh.compatibility` matrix as well as the host's `engines.dsh` gate. Exact API compatibility is tested on DSH `0.2.0-rc.2` and `0.2.1-alpha.1`; `0.2.1-alpha.2` remains unknown until its CI lane passes. Linux, macOS and Windows packed-plugin tests exercise host and browser contracts, not packaged desktop GUIs. Web/desktop profiles need the stated conversation and command client modules; headless profiles expose only the command.
+The manifest includes the Store-specific `dsh.compatibility` matrix as well as the host's `engines.dsh` gate. Packed API tests pass on DSH `0.2.0-rc.2`, `0.2.1-alpha.1`, and `0.2.1-alpha.2`. Linux, macOS and Windows packed-plugin tests exercise host and browser contracts, not packaged desktop GUIs. Web/desktop profiles need the stated conversation and command client modules; headless profiles expose only the command.
 
 | Capability | Scope |
 | --- | --- |

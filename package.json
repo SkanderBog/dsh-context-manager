@@ -14,7 +14,7 @@
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0",
-    "dsh": ">=0.2.0-rc.2 || 0.2.1-alpha.1"
+    "dsh": ">=0.2.0-rc.2 || 0.2.1-alpha.1 || 0.2.1-alpha.2"
   },
   "main": "lib/index.mjs",
   "exports": {
@@ -43,11 +43,11 @@
     },
     "pluginType": "feature",
     "compatibility": {
-      "dsh": "0.2.0-rc.2 || 0.2.1-alpha.1",
+      "dsh": "0.2.0-rc.2 || 0.2.1-alpha.1 || 0.2.1-alpha.2",
       "dshReleases": {
         "0.2.0-rc.2": "compatible",
         "0.2.1-alpha.1": "compatible",
-        "0.2.1-alpha.2": "unknown"
+        "0.2.1-alpha.2": "compatible"
       },
       "dshOperations": {
         "0.2.0-rc.2": {
@@ -85,9 +85,9 @@
     "prepack": "npm run build"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-compaction": "^0.2.0-rc.2 || 0.2.1-alpha.1",
-    "@deepseek-ai/dsh-llm": "^0.2.0-rc.2 || 0.2.1-alpha.1",
-    "@deepseek-ai/dsh-token-meter": "^0.2.0-rc.2 || 0.2.1-alpha.1"
+    "@deepseek-ai/dsh-compaction": "^0.2.0-rc.2 || 0.2.1-alpha.1 || 0.2.1-alpha.2",
+    "@deepseek-ai/dsh-llm": "^0.2.0-rc.2 || 0.2.1-alpha.1 || 0.2.1-alpha.2",
+    "@deepseek-ai/dsh-token-meter": "^0.2.0-rc.2 || 0.2.1-alpha.1 || 0.2.1-alpha.2"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-compaction": {
