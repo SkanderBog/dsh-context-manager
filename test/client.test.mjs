@@ -19,10 +19,14 @@ test('Context panel requires a reviewed preview, consumes failed apply, and refr
   for (const name of ['window', 'document', 'HTMLElement', 'HTMLInputElement', 'Event', 'MouseEvent']) { saved.set(name, globalThis[name]); globalThis[name] = dom.window[name] }
   dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true }
   const components = new Map(), cleanups = [], commands = []
+  const timers = new Map()
+  let nextTimer = 0
   let plugin, decoration
   vm.runInNewContext(await readFile(process.env.DSH_CONTEXT_CLIENT_ENTRY ?? new URL('../src/client.js', import.meta.url), 'utf8'), {
     window: { __ModuleLoader__: { load: entry => { plugin = entry.factory(require) } } },
     document: dom.window.document, Intl, AbortController, Map, JSON, Math,
+    setTimeout: callback => { timers.set(++nextTimer, callback); return nextTimer },
+    clearTimeout: id => timers.delete(id),
   })
   assert(plugin.inject.includes('remote') && plugin.inject.includes('remote.commands'), 'Cordis requires both the root remote and commands namespace')
   const snapshot = { fingerprint: 'before', totalTokens: 1600, contextWindow: 10000, percent: 16, breakdown: { user: 700, answers: 800, thinking: 100 }, groups: [
@@ -30,12 +34,16 @@ test('Context panel requires a reviewed preview, consumes failed apply, and refr
     { id: '2', seqs: [2], tokens: 800, excerpt: 'Latest request', locked: true, latest: true },
   ] }
   let failApply = true
+  let delayPreview = false, resolvePreview
   const ctx = {
     remote: { commands: { async execute(_id, line) {
       const request = JSON.parse(line.slice('/context-manager '.length)); commands.push(request)
       let value = {}
       if (request.op === 'inspect') value = snapshot
-      if (request.op === 'preview') value = { id: 'reviewed-plan', before: 1600, after: 1000, replacements: [{ seqs: [1], before: 800, after: 200, action: 'omit', summary: 'Exact preview checkpoint' }] }
+      if (request.op === 'preview') {
+        value = { id: 'reviewed-plan', expires: Date.now() + 600000, before: 1600, after: 1000, replacements: [{ seqs: [1], before: 800, after: 200, action: 'omit', summary: 'Exact preview checkpoint' }] }
+        if (delayPreview) await new Promise(resolve => { resolvePreview = resolve })
+      }
       if (request.op === 'apply' && failApply) return { ok: true, value: { result: { kind: 'error', text: 'The conversation changed after preview.' } } }
       if (request.op === 'apply') { snapshot.totalTokens = 1000; snapshot.percent = 10; value = { before: 1600, after: 1000, message: 'Context updated. Original messages remain.' } }
       return { ok: true, value: { result: { kind: 'success', text: JSON.stringify({ contextManager: 1, op: request.op, ...value }) } } }
@@ -56,15 +64,34 @@ test('Context panel requires a reviewed preview, consumes failed apply, and refr
   assert(document.querySelector('select[aria-label="Action for history 2"]').disabled)
   const select = document.querySelector('select[aria-label="Action for history 1"]')
   await click('Summarize older groups')
+  assert.match(document.querySelector('footer').textContent, /~800 tokens before replacement/)
+  assert.match(document.querySelector('footer').textContent, /may incur normal usage/)
   assert.equal(select.value, 'summarize', 'The only eligible older exchange must be selected')
   assert.equal(document.querySelector('select[aria-label="Action for history 2"]').value, 'keep', 'The latest exchange stays protected')
   await click('Keep all')
   assert.equal(select.value, 'keep')
   await act(async () => { select.value = 'omit'; select.dispatchEvent(new Event('change', { bubbles: true })) })
+  assert.match(document.querySelector('footer').textContent, /Omission-only previews do not call the model/)
   await click('Generate preview')
   assert.equal(commands.find(c => c.op === 'preview').choices['1'], 'omit')
   assert.match(document.querySelector('.dcm-summary').textContent, /Exact preview checkpoint/)
   const applyButton = () => [...document.querySelectorAll('button')].find(b => b.textContent === 'Apply preview')
+  const generateButton = () => [...document.querySelectorAll('button')].find(b => b.textContent === 'Generate preview')
+  assert.equal(document.activeElement, document.querySelector('input[type="checkbox"]'), 'The new preview moves focus to review confirmation')
+  assert(generateButton().disabled, 'Do not repeat a paid request while its preview is available')
+  await click('Generate preview')
+  assert.equal(commands.filter(c => c.op === 'preview').length, 1)
+  await click('Discard preview')
+  assert(!generateButton().disabled)
+  assert.equal(document.querySelector('.dcm-summary'), null)
+  assert(commands.some(c => c.op === 'discard' && c.id === 'reviewed-plan'))
+  await click('Generate preview')
+  assert.equal(timers.size, 1, 'Discarding a plan clears its expiry timer')
+  await act(async () => { const [id, expire] = timers.entries().next().value; timers.delete(id); expire() })
+  assert.match(document.body.textContent, /Preview expired/)
+  assert(applyButton().disabled)
+  assert(!generateButton().disabled)
+  await click('Generate preview')
   assert(applyButton().disabled)
   await act(async () => document.querySelector('input[type="checkbox"]').click())
   assert(!applyButton().disabled)
@@ -78,6 +105,15 @@ test('Context panel requires a reviewed preview, consumes failed apply, and refr
   assert.match(document.body.textContent, /Original messages remain/)
   assert.match(document.body.textContent, /1,000 tokens/)
   assert.equal(commands.filter(c => c.op === 'apply').length, 2)
+  await click('Summarize older groups')
+  delayPreview = true
+  await click('Generate preview')
+  await click('Cancel operation')
+  await act(async () => resolvePreview())
+  assert.equal(document.querySelector('.dcm-summary'), null, 'A late response must not revive a cancelled preview')
+  assert.match(document.querySelector('[role="alert"]').textContent, /Operation cancelled/)
+  assert(applyButton().disabled)
+  assert.equal(timers.size, 0)
   await click('Close')
   assert.equal(document.querySelector('dialog'), null)
 

@@ -10,6 +10,8 @@ A standalone plugin for DeepSeek Harness 0.2.0-rc.2 or later. Adds a **Context**
 4. Choose whether summaries should summarize, retain the original text of, or omit recorded tool/file outputs.
 5. Generate a preview. Review the exact replacement text and estimated token change, check the review box, and apply.
 
+The footer shows the approximate token count of selected groups before replacement, and distinguishes paid summary requests from omission-only previews that do not call the model. When a preview is ready, focus moves to its review checkbox. Generate preview stays disabled while that preview is available, avoiding duplicate summary requests; use **Discard preview** or change the selection to prepare another. Expired previews are removed automatically. A cancelled request cannot restore its preview if a response arrives late.
+
 Summary requests start with the conversation's most recently routed model and may incur normal model usage. A host plugin can reroute requests marked `purpose: 'compaction'` to a dedicated summarizer. Changing an unsent composer selection alone does not set the summary model. An omission-only preview does not call the model. A preview makes no change to active context. It expires after ten minutes, a new preview, plugin reload, or a change to the conversation. Apply is permitted only while the agent is idle. A preview that expires or is discarded while the initial save is pending is rejected before any history changes.
 
 **Keep applies to this operation. It is not a permanent pin against Harness's automatic compaction.** Existing automatic compaction is left in place.
