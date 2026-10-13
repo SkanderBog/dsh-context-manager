@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Show selected history token totals and whether a preview will call the model; reuse the number formatter across panel renders.
+- Focus the review control when a preview is ready and prevent duplicate summary requests until the preview is discarded or the selection changes.
+- Remove expired previews and discard late responses to cancelled previews before they can be applied.
+- Keep footer actions visible on narrow screens by scrolling the panel body within the dialog's available height.
+
 ## 0.1.5
 
 - Preserve adapted-code attribution in `NOTICE.md`, a text artifact recognized by the Store scanner.

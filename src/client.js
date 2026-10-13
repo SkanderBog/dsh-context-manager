@@ -6,11 +6,13 @@ window.__ModuleLoader__.load({
     const { createPortal } = require('react-dom')
     const h = React.createElement
     const { useState, useEffect, useRef } = React
-    const format = value => new Intl.NumberFormat().format(Math.round(value))
+    const numberFormat = new Intl.NumberFormat()
+    const format = value => numberFormat.format(Math.round(value))
     const labels = { instructions: 'System / developer instructions', harnessContext: 'Harness instructions / runtime context', user: 'User messages', answers: 'Assistant answers', thinking: 'Stored reasoning', toolOutputs: 'Tool / file outputs', toolCalls: 'Tool calls', attachments: 'Attachment references', toolDefinitions: 'Tool definitions', other: 'Other content' }
     const CSS = `
       .dcm-open{font:inherit;font-size:12px;padding:5px 10px;border:1px solid var(--border,#7775);border-radius:8px;background:transparent;color:inherit;cursor:pointer;white-space:nowrap}
       .dcm{color:var(--foreground,#e6e8ec);background:var(--background,#1c1d21);border:1px solid #8885;border-radius:16px;padding:0;width:min(1040px,94vw);max-height:90vh;box-shadow:0 20px 90px #0008;font:14px/1.5 system-ui,sans-serif;color-scheme:light dark}
+      .dcm[open]{display:flex;flex-direction:column;overflow:hidden}.dcm header,.dcm footer{flex-shrink:0}.dcm-body{min-height:0;flex:1 1 auto}.dcm-check input{flex-shrink:0}
       .dcm::backdrop{background:#0008}.dcm *{box-sizing:border-box}.dcm header,.dcm footer{padding:16px 22px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #8883}.dcm footer{border-top:1px solid #8883;border-bottom:0;flex-wrap:wrap}.dcm h2{font-size:20px;margin:0}.dcm h3{font-size:15px;margin:0 0 8px}.dcm p{margin:7px 0}.dcm-body{overflow:auto;max-height:65vh;padding:18px 22px}.dcm-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.dcm-muted{opacity:.75;font-size:12px}.dcm button,.dcm select{font:inherit;color:inherit;background:transparent;border:1px solid #8886;border-radius:7px;padding:7px 11px;cursor:pointer}.dcm select{background:var(--background,#1c1d21)}.dcm button:disabled,.dcm select:disabled{opacity:.45;cursor:default}.dcm button:focus-visible,.dcm select:focus-visible{outline:2px solid #7da2ff;outline-offset:2px}.dcm button.dcm-primary{background:#345cda;color:white;border-color:#345cda}.dcm-error{border:1px solid #df7272;background:#cc44441c;padding:10px;border-radius:8px;margin-bottom:12px}.dcm-success{border:1px solid #55a87d;padding:10px;border-radius:8px;margin-bottom:12px}.dcm-meter{height:7px;background:#8883;border-radius:9px;overflow:hidden;margin:9px 0 16px}.dcm-meter span{display:block;background:#6b95ff;height:100%}.dcm-breakdown{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0 20px}.dcm-stat{border:1px solid #8883;border-radius:8px;padding:8px 10px}.dcm-stat strong{display:block;font-size:17px;font-variant-numeric:tabular-nums}.dcm-controls{padding:12px;border:1px solid #8883;border-radius:9px;margin:12px 0}.dcm-groups{display:flex;flex-direction:column;gap:8px}.dcm-group{display:grid;grid-template-columns:1fr auto;gap:12px;border:1px solid #8883;border-radius:9px;padding:11px}.dcm-group p{white-space:pre-wrap;overflow-wrap:anywhere;max-height:90px;overflow:auto;font-size:12px;margin-bottom:0}.dcm-tag{display:inline-block;font-size:11px;padding:1px 6px;border-radius:5px;background:#8882;margin-left:7px}.dcm-summary{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.65 ui-monospace,monospace;max-height:260px;overflow:auto;border:1px solid #8884;border-radius:8px;padding:12px}.dcm-preview{margin-bottom:16px}.dcm-check{display:flex;gap:8px;align-items:center}.dcm-check input{width:17px;height:17px}.dcm-page{margin:12px 0}.dcm .dcm-danger{color:#e68787}@media(max-width:650px){.dcm-breakdown{grid-template-columns:repeat(2,1fr)}.dcm header,.dcm footer,.dcm-body{padding:12px}.dcm-group{grid-template-columns:1fr}.dcm-body{max-height:60vh}}
     `
 
@@ -19,6 +21,7 @@ window.__ModuleLoader__.load({
       const abort = useRef(null)
       const mounted = useRef(true)
       const currentPlan = useRef(null)
+      const reviewInput = useRef(null)
       const [snapshot, setSnapshot] = useState(null)
       const [choices, setChoices] = useState({})
       const [outputs, setOutputs] = useState('summarize')
@@ -66,6 +69,20 @@ window.__ModuleLoader__.load({
           if (previouslyFocused?.isConnected) previouslyFocused.focus()
         }
       }, [])
+      useEffect(() => {
+        if (!plan || busy) return
+        reviewInput.current?.focus()
+        reviewInput.current?.scrollIntoView?.({ block: 'nearest' })
+      }, [plan, busy])
+      useEffect(() => {
+        if (!plan) return
+        const timer = setTimeout(() => {
+          if (currentPlan.current !== plan) return
+          invalidate()
+          setNotice('Preview expired. Generate a new preview before applying; context is unchanged.')
+        }, Math.max(0, plan.expires - Date.now()))
+        return () => clearTimeout(timer)
+      }, [plan])
       const choose = (id, action) => { invalidate(); setChoices(values => ({ ...values, [id]: action })); setNotice('') }
       const selectOlder = () => {
         invalidate(); setNotice('')
@@ -73,10 +90,15 @@ window.__ModuleLoader__.load({
         setChoices(Object.fromEntries(eligible.map(g => [g.id, 'summarize'])))
       }
       const preview = () => run('Preparing summary preview…', async signal => {
+        if (currentPlan.current) return
         invalidate(); setNotice('')
         const value = await request({ op: 'preview', fingerprint: snapshot.fingerprint, choices, outputs }, signal)
-        if (mounted.current) { currentPlan.current = value; setPlan(value); setReviewed(false) }
-        else void request({ op: 'discard', id: value.id }).catch(() => {})
+        if (!mounted.current || signal.aborted) {
+          void request({ op: 'discard', id: value.id }).catch(() => {})
+          signal.throwIfAborted()
+          return
+        }
+        currentPlan.current = value; setPlan(value); setReviewed(false)
       })
       const apply = () => run('Applying and saving context…', async signal => {
         const id = currentPlan.current?.id
@@ -86,7 +108,10 @@ window.__ModuleLoader__.load({
         const value = await request({ op: 'apply', id }, signal)
         if (mounted.current) { setNotice(value.message); await refresh(signal) }
       })
-      const selected = Object.values(choices).filter(v => v !== 'keep').length
+      const selectedGroups = snapshot?.groups.filter(g => !g.locked && choices[g.id] && choices[g.id] !== 'keep') ?? []
+      const selected = selectedGroups.length
+      const selectedTokens = selectedGroups.reduce((total, group) => total + group.tokens, 0)
+      const usesModel = selectedGroups.some(group => choices[group.id] === 'summarize')
       const rows = snapshot?.groups.slice(page * 30, (page + 1) * 30) ?? []
       return createPortal(h('dialog', { ref: dialog, className: 'dcm', 'aria-labelledby': 'dcm-title', onCancel: event => { event.preventDefault(); if (!busy.startsWith('Applying')) close() } },
         h('header', null, h('div', null, h('h2', { id: 'dcm-title' }, 'Context manager'), h('div', { className: 'dcm-muted' }, 'Choose what the model carries into its next reply.')), h('button', { onClick: close, disabled: busy.startsWith('Applying'), 'aria-label': 'Close context manager' }, 'Close')),
@@ -116,10 +141,10 @@ window.__ModuleLoader__.load({
               h('h3', null, `Preview: ~${format(plan.before)} → ~${format(plan.after)} tokens`),
               h('p', { className: 'dcm-muted' }, 'Nothing has changed yet. Review each replacement before applying. Preview expires in 10 minutes or when the conversation changes.'),
               plan.replacements.map((r, i) => h('div', { className: 'dcm-preview', key: i }, h('strong', null, `${r.action === 'omit' ? 'Omit' : 'Summarize'} ${r.seqs.length} history items · ~${format(r.before)} → ~${format(r.after)}`), h('pre', { className: 'dcm-summary' }, r.summary))),
-              h('label', { className: 'dcm-check' }, h('input', { type: 'checkbox', checked: reviewed, disabled: !!busy, onChange: e => setReviewed(e.target.checked) }), 'I reviewed the replacement text.')))),
+              h('label', { className: 'dcm-check' }, h('input', { ref: reviewInput, type: 'checkbox', checked: reviewed, disabled: !!busy, onChange: e => setReviewed(e.target.checked) }), 'I reviewed the replacement text.')))),
         h('footer', null,
-          h('span', { className: 'dcm-muted' }, `${selected} group(s) selected. Summary previews use your model and may incur normal usage.`),
-          h('div', { className: 'dcm-row' }, busy && !busy.startsWith('Applying') && h('button', { onClick: () => abort.current?.abort() }, 'Cancel operation'), h('button', { disabled: !!busy || !selected, onClick: preview }, 'Generate preview'), h('button', { className: 'dcm-primary', disabled: !!busy || !plan || !reviewed, onClick: apply }, 'Apply preview')))), document.body)
+          h('span', { className: 'dcm-muted', role: 'status' }, `${selected} group(s) selected${selected ? ` · ~${format(selectedTokens)} tokens before replacement` : ''}. ${usesModel ? 'Summary previews use your model and may incur normal usage.' : selected ? 'Omission-only previews do not call the model.' : 'Select older history to summarize or omit.'}`),
+          h('div', { className: 'dcm-row' }, busy && !busy.startsWith('Applying') && h('button', { onClick: () => abort.current?.abort() }, 'Cancel operation'), plan && h('button', { disabled: !!busy, onClick: () => { invalidate(); setNotice('Preview discarded. Context is unchanged.') } }, 'Discard preview'), h('button', { disabled: !!busy || !selected || !!plan, onClick: preview }, 'Generate preview'), h('button', { className: 'dcm-primary', disabled: !!busy || !plan || !reviewed, onClick: apply }, 'Apply preview')))), document.body)
     }
 
     function apply(ctx) {
