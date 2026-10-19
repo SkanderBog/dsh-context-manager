@@ -27,7 +27,7 @@ Preview generation reports the number of summary calls and their provider-report
 
 **View originals** reads the record's exact source event IDs from the same session log, including noncontiguous ranges and older checkpoints. This is a read-only, human-facing view; it neither restores messages nor sends them to a model. Reasoning and raw summarizer output are excluded. Image pixels are not displayed. Truncation and unavailable source events are marked explicitly. The view continues to work after reloading a saved session.
 
-History pages search at most 1,000 log events for at most ten records; command attribution uses a bounded lookback for each record. Originals show five messages per page with at most 8,000 visible characters each. Last-request accounting searches at most 10,000 recent events. These bounds keep inspection responsive on long sessions. **Older compression records** continues through pages even when a page has no checkpoints. Proxy-only compression and IoT's separate originals archive are outside this log view.
+History pages search at most 1,000 log events for at most ten records; command attribution uses a bounded lookback for each record. Originals show five messages per page with at most 8,000 visible characters each. Last-request accounting searches at most 10,000 recent events. These bounds keep inspection responsive on long sessions. **Older compression records** continues through pages even when a page has no checkpoints; **Newer compression records** returns through visited pages. Refresh starts again at the newest records. Proxy-only compression and IoT's separate originals archive are outside this log view.
 
 ## Reviewed decision notes
 
@@ -64,8 +64,10 @@ The context total uses Harness's token meter. Category estimates use its fixed t
 
 ## Install a packaged release
 
+Download the archive from [v0.2.0](https://github.com/SkanderBog/dsh-context-manager/releases/tag/v0.2.0).
+
 ```sh
-dsh plugin --profile tauri add /absolute/path/dsh-context-manager-0.1.5.tgz
+dsh plugin --profile tauri add /absolute/path/dsh-context-manager-0.2.0.tgz
 ```
 
 Use your actual Harness profile name. The community Linux desktop uses `tauri` on the tested installation. Other Harness desktop distributions may use `desktop`; quit that desktop before changing its reserved profile. Restart Harness after updating the plugin: reloading the frontend or toggling a component can leave the previously imported host module cached.
@@ -121,12 +123,12 @@ The profile must already contain Rewind, Better Sidebar and DSH Market. The scri
 
 All selected summary ranges are checked against the transcript limit before the first model request. An oversized later range therefore leaves history unchanged without charging an earlier summary request. Omit-only ranges do not require a model or summary transcript.
 
-CI tests packed host and browser artifacts on Linux, macOS and Windows. The pinned baseline is Harness `0.2.0-rc.2`; an additional Linux/Node 24 lane exercises `0.2.1-alpha.1` without changing the release dependency pins. These are plugin/runtime checks, not packaged desktop GUI tests.
+CI tests packed host and browser artifacts on Linux, macOS and Windows. The pinned baseline is Harness `0.2.0-rc.2`; additional Linux/Node 24 lanes exercise `0.2.1-alpha.1`, `0.2.1-alpha.2`, and `0.2.1-rc.2` without changing the release dependency pins. These are plugin/runtime checks, not packaged desktop GUI tests.
 
 
 ## Store compatibility and permissions
 
-The manifest includes the Store-specific `dsh.compatibility` matrix as well as the host's `engines.dsh` gate. Packed API tests pass on DSH `0.2.0-rc.2`, `0.2.1-alpha.1`, and `0.2.1-alpha.2`. Linux, macOS and Windows packed-plugin tests exercise host and browser contracts, not packaged desktop GUIs. Web/desktop profiles need the stated conversation and command client modules; headless profiles expose only the command.
+The manifest includes the Store-specific `dsh.compatibility` matrix as well as the host's `engines.dsh` gate. Packed API tests pass on DSH `0.2.0-rc.2`, `0.2.1-alpha.1`, `0.2.1-alpha.2`, and `0.2.1-rc.2`. Linux, macOS and Windows packed-plugin tests exercise host and browser contracts, not packaged desktop GUIs. Web/desktop profiles need the stated conversation and command client modules; headless profiles expose only the command.
 
 | Capability | Scope |
 | --- | --- |

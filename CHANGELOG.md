@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — 2026-10-19
+
+- Navigate back to newer compression-history pages, including across empty pages.
+- Add a packed runtime test lane for Harness `0.2.1-rc.2`.
 
 - Separate the local context estimate, last reported model input/output, and preview-generation usage, with explicit unknown and partial-reporting states.
 - Read the current conversation's optional `acp_status` tool through Harness's tool and permission pipeline, on demand.

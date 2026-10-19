@@ -19,6 +19,9 @@ jobs:
           - os: ubuntu-latest
             node: 24
             harness: 0.2.1-alpha.2
+          - os: ubuntu-latest
+            node: 24
+            harness: 0.2.1-rc.2
           - os: macos-latest
             node: 24
             harness: 0.2.0-rc.2
@@ -49,7 +52,7 @@ jobs:
           for (const name of Object.keys(manifest.devDependencies)) {
             if (name.startsWith('@deepseek-ai/dsh-')) manifest.devDependencies[name] = process.env.HARNESS_TEST_VERSION
           }
-          manifest.devDependencies['@deepseek-ai/cordis'] = '4.0.5-alpha.1'
+          manifest.devDependencies['@deepseek-ai/cordis'] = process.env.HARNESS_TEST_VERSION === '0.2.1-rc.2' ? '4.0.5' : '4.0.5-alpha.1'
           try {
             writeFileSync('package.json', JSON.stringify(manifest))
             execFileSync('npm', ['install', '--package-lock=false', '--ignore-scripts', '--no-audit', '--no-fund'], { stdio: 'inherit' })
