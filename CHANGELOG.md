@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Separate the local context estimate, last reported model input/output, and preview-generation usage, with explicit unknown and partial-reporting states.
+- Read the current conversation's optional `acp_status` tool through Harness's tool and permission pipeline, on demand.
+- Inspect paginated compression records and their original visible messages without changing model context; show attribution, checkpoint state, and truncation.
+- Preserve explicit reviewed decisions, rejected approaches, risks, and next steps verbatim across later Context Manager summaries and session reloads.
+- Label reasoning-bearing groups and retain native reasoning exclusion; validate note limits before any paid summary request.
 - Show selected history token totals and whether a preview will call the model; reuse the number formatter across panel renders.
 - Focus the review control when a preview is ready and prevent duplicate summary requests until the preview is discarded or the selection changes.
 - Remove expired previews and discard late responses to cancelled previews before they can be applied.

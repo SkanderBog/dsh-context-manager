@@ -26,6 +26,9 @@ export function apply(ctx) {
             let result
             switch (request.op) {
               case 'inspect': result = manager.inspect(invocation.agent); break
+              case 'history': result = manager.history(invocation.agent, request.cursor); break
+              case 'originals': result = manager.originals(invocation.agent, request.recordSeq, request.offset); break
+              case 'acp-status': result = await manager.acpStatus(invocation.agent, signal); break
               case 'preview': result = await manager.preview(invocation.agent, request, signal); break
               case 'apply': result = await manager.apply(invocation.agent, request.id, signal, invocation.commandId); break
               case 'discard': result = manager.discard(invocation.agent, request.id); break

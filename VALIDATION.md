@@ -1,4 +1,13 @@
-# Validation — 0.1.4
+# Validation
+
+## Context reporting, history inspection, and reviewed notes — 2026-10-19
+
+- The exact package check passes **44 tests** against the extracted host bundle and browser entry. It verifies the eleven-file public archive. Real Harness services cover provider usage with disjoint cache buckets, missing usage, a session-bound ACP status tool, compression attribution, pagination, reload, preserved native reasoning/signatures, and unchanged context during inspection.
+- Notes are tested across two successive summaries and persistence replay, including exact source provenance, explicit omission, preflight rejection of invalid/excessive notes, exclusion from generative rewriting, and rejection of note-format impersonation by ordinary assistant text. Browser tests cover editing notes, preview invalidation, separate local/reported usage, on-demand ACP status, original-message pagination, and refresh cleanup.
+- Headless Chrome passed at **1280 × 800** and **360 × 800** with 65 history groups. Actual textarea entry reaches the preview request. ACP and originals views render; preview review receives focus; Apply remains visible; there is no horizontal overflow or browser error. These use a controlled command endpoint and the shipped browser source, not the packaged desktop GUI.
+- The installed-plugin composition harness passed against Harness **0.2.0-rc.2**, Rewind **0.15.0**, Better Sidebar **0.24.1**, DSH Market **1.66.6**, and PDF Reader. It uses scratch storage, exercises rewind/cancellation, durable compaction, PDF text/images, read-only Market capabilities, and plugin disposal.
+- The ACP integration exercises the real Harness tool runtime with a controlled tool matching the native ACP string-output contract. No live billion-context/IoT deployment or paid provider call was made. External engines can alter their APIs and context policies; these checks do not certify every combination. Existing native reasoning is excluded, never rewritten by this plugin.
+- No release version, profile registration, or desktop restart is part of this source update. CI separately checks Linux/Node 22, Linux/Node 24 on two Harness alpha versions, macOS/Node 24, and Windows/Node 24.
 
 ## Unreleased compatibility fixes — 2026-10-08
 
