@@ -35,6 +35,7 @@ window.__ModuleLoader__.load({
       const [notice, setNotice] = useState('')
       const [page, setPage] = useState(0)
       const [history, setHistory] = useState(null)
+      const [historyCursors, setHistoryCursors] = useState([])
       const [originals, setOriginals] = useState(null)
       const [acp, setAcp] = useState(null)
       const request = async (payload, signal) => {
@@ -63,7 +64,7 @@ window.__ModuleLoader__.load({
       }
       const refresh = signal => request({ op: 'inspect' }, signal).then(value => {
         if (!mounted.current) return
-        invalidate(); setSnapshot(value); setChoices({}); setNotes({}); setPage(0); setHistory(null); setOriginals(null); setAcp(null); updateMeter(value.percent)
+        invalidate(); setSnapshot(value); setChoices({}); setNotes({}); setPage(0); setHistory(null); setHistoryCursors([]); setOriginals(null); setAcp(null); updateMeter(value.percent)
       })
       useEffect(() => {
         mounted.current = true
@@ -122,9 +123,12 @@ window.__ModuleLoader__.load({
       const selectedTokens = selectedGroups.reduce((total, group) => total + group.tokens, 0)
       const usesModel = selectedGroups.some(group => choices[group.id] === 'summarize')
       const rows = snapshot?.groups.slice(page * 30, (page + 1) * 30) ?? []
-      const loadHistory = cursor => run('Reading compression history…', async signal => {
+      const loadHistory = (cursor, back = false) => run('Reading compression history…', async signal => {
         const value = await request({ op: 'history', ...(cursor === undefined ? {} : { cursor }) }, signal)
-        if (mounted.current) { setHistory(value); setOriginals(null) }
+        if (mounted.current) {
+          setHistoryCursors(previous => back ? previous.slice(0, -1) : cursor === undefined ? [] : [...previous, history?.cursor])
+          setHistory({ ...value, cursor }); setOriginals(null)
+        }
       })
       const loadOriginals = (recordSeq, offset = 0) => run('Reading original messages…', async signal => {
         const value = await request({ op: 'originals', recordSeq, offset }, signal)
@@ -180,6 +184,7 @@ window.__ModuleLoader__.load({
                 h('pre', { className: 'dcm-summary' }, record.text),
                 record.truncated && h('p', null, 'Checkpoint display truncated.'),
                 h('button', { disabled: !!busy, onClick: () => loadOriginals(record.seq) }, `View originals for record ${record.seq}`))),
+              historyCursors.length > 0 && h('button', { disabled: !!busy, onClick: () => loadHistory(historyCursors.at(-1), true) }, 'Newer compression records'),
               history?.nextCursor != null && h('button', { disabled: !!busy, onClick: () => loadHistory(history.nextCursor) }, 'Older compression records'),
               originals && h('section', { 'aria-label': 'Original messages' },
                 h('h3', null, `Originals for record #${originals.recordSeq}`),

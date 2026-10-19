@@ -158,7 +158,9 @@ test('panel separates usage, reads ACP and originals on demand, and invalidates 
       let result
       if (payload.op === 'inspect') result = snapshot
       if (payload.op === 'acp-status') result = { text: 'Effective context: 1,400 tokens', source: 'acp_status' }
-      if (payload.op === 'history') result = { records: [{ seq: 20, origin: 'Context Manager', state: 'active', originalCount: 6, provider: 'test', model: 'fixture', text: 'Saved checkpoint', usage: null }], nextCursor: null }
+      if (payload.op === 'history') result = payload.cursor === 10
+        ? { records: [], nextCursor: 0 }
+        : { records: [{ seq: payload.cursor === 0 ? 0 : 20, origin: 'Context Manager', state: 'active', originalCount: 6, provider: 'test', model: 'fixture', text: 'Saved checkpoint', usage: null }], nextCursor: payload.cursor === 0 ? null : 10 }
       if (payload.op === 'originals') result = { recordSeq: 20, messages: [{ seq: payload.offset ? 6 : 1, role: 'user', text: 'Original visible message', truncated: true }], total: 6, nextOffset: payload.offset ? null : 5 }
       if (payload.op === 'preview') result = { id: 'notes-preview', expires: Date.now() + 600000, before: 9000, after: 3000, usage: { calls: 1, reportedCalls: 1, inputTokens: 300, outputTokens: 50 }, replacements: [{ seqs: [1, 2], action: 'summarize', before: 8000, after: 2000, summary: JSON.stringify(payload.notes) }] }
       return { ok: true, value: { result: { kind: 'success', text: JSON.stringify(result ?? {}) } } }
@@ -183,6 +185,20 @@ test('panel separates usage, reads ACP and originals on demand, and invalidates 
   assert.match(document.body.textContent, /Message display truncated/)
   await click('Next originals')
   assert.equal(calls.at(-1).offset, 5)
+  await click('Older compression records')
+  assert.match(document.body.textContent, /No compression records in this page/)
+  assert.equal(document.querySelector('[aria-label="Original messages"]'), null)
+  await click('Older compression records')
+  assert.equal(calls.at(-1).cursor, 0, 'Zero is a valid history cursor')
+  await click('Newer compression records')
+  assert.equal(calls.at(-1).cursor, 10)
+  assert.match(document.body.textContent, /No compression records in this page/)
+  await click('Newer compression records')
+  assert.equal(calls.at(-1).cursor, undefined)
+  assert(![...document.querySelectorAll('button')].some(button => button.textContent === 'Newer compression records'))
+  await click('Older compression records')
+  await click('Refresh compression history')
+  assert(![...document.querySelectorAll('button')].some(button => button.textContent === 'Newer compression records'))
   await click('Summarize older groups')
   const textarea = document.querySelector('textarea[aria-label="Decision for history 1"]')
   assert(textarea)

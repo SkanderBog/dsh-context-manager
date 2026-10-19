@@ -1,5 +1,11 @@
 # Validation
 
+## v0.2.0 release validation — 2026-10-19
+
+- Source and extracted-package suites pass 44 tests. History navigation now covers older/newer pages, empty pages, cursor zero, clearing the originals view, and refresh resetting the navigation trail.
+- The CI matrix adds Harness `0.2.1-rc.2` with its stable Cordis `4.0.5` peer. Release publication is gated on all six lanes; profile lifecycle and packaged desktop GUI coverage remain separate.
+- The earlier features and their validation are recorded below. No installed profile is changed by publishing this release.
+
 ## Context reporting, history inspection, and reviewed notes — 2026-10-19
 
 - The exact package check passes **44 tests** against the extracted host bundle and browser entry. It verifies the eleven-file public archive. Real Harness services cover provider usage with disjoint cache buckets, missing usage, a session-bound ACP status tool, compression attribution, pagination, reload, preserved native reasoning/signatures, and unchanged context during inspection.
