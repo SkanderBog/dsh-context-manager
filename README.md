@@ -8,7 +8,36 @@ A standalone plugin for DeepSeek Harness 0.2.0-rc.2 or later. Adds a **Context**
 2. Inspect estimated context usage and its composition: instructions, user messages, answers, stored reasoning, tool/file outputs, tool definitions, and attachment references.
 3. Choose **Keep**, **Summarize**, or **Omit** for older history groups. The latest exchange, system/developer instructions, Harness instruction/catalog/runtime snapshots, and incomplete tool exchanges are protected.
 4. Choose whether summaries should summarize, retain the original text of, or omit recorded tool/file outputs.
-5. Generate a preview. Review the exact replacement text and estimated token change, check the review box, and apply.
+5. Optionally open **Add notes to preserve** on a selected group. Record a decision, rejected approach and reason, risk, or next step.
+6. Generate a preview. Review the exact replacement text, notes, generation usage, and estimated local token change, check the review box, and apply.
+
+## Local context, reported usage, and ACP
+
+The panel labels **local context** separately from **the last reported model request**. The first uses Harness's context meter; it is an estimate of the retained session surface. The second reports provider input and output counts from the latest recent assistant event with usable usage data. Input includes Harness's disjoint uncached, cache-read, and cache-write buckets. Reasoning tokens are already part of output and are not added again. A previous request does not measure the next request, especially after a route or context change. Missing usage is shown as unavailable, never as zero.
+
+If the current agent can see an `acp_status` tool, **Read ACP status** asks that tool for its report using the current agent/session and Harness's ordinary tool execution and permission pipeline. It makes no model request and runs only when clicked. The report is displayed as text without parsing it into an invented token count. Refreshing the panel clears it; refresh the status after further work. Errors, restricted tool modes, cancellation, and an unavailable engine are explicit. No proxy addresses, credentials, or other sessions are discovered. The request has a cooperative ten-second timeout.
+
+This supports the tool boundary used by `ranxianglei/billion-context` and ACP implementations, without a required dependency on either. In billion-context's native DSH mode, the local history can be much larger than the proxy's effective model input. The local estimate and ACP report therefore remain separate. The adapter has been tested with Harness's real tool runtime and a controlled ACP tool; a live third-party engine and provider have not been certified by these tests.
+
+Preview generation reports the number of summary calls and their provider-reported input/output totals independently of context savings. Partial reporting is labelled. Omission-only previews report zero model calls. These are token counts, not currency estimates or a complete billing ledger; discarded/failed previews and other plugins' calls are not reconstructed into a session total.
+
+## Compression history and originals
+
+**Load compression history** reads standard Harness `compaction/summary` records. Each shows its recorded summary route, command/engine attribution when available, usage, checkpoint text, and whether the replacement is active, superseded, or was not applied. Attribution is left unknown when the log does not establish it.
+
+**View originals** reads the record's exact source event IDs from the same session log, including noncontiguous ranges and older checkpoints. This is a read-only, human-facing view; it neither restores messages nor sends them to a model. Reasoning and raw summarizer output are excluded. Image pixels are not displayed. Truncation and unavailable source events are marked explicitly. The view continues to work after reloading a saved session.
+
+History pages search at most 1,000 log events for at most ten records; command attribution uses a bounded lookback for each record. Originals show five messages per page with at most 8,000 visible characters each. Last-request accounting searches at most 10,000 recent events. These bounds keep inspection responsive on long sessions. **Older compression records** continues through pages even when a page has no checkpoints. Proxy-only compression and IoT's separate originals archive are outside this log view.
+
+## Reviewed decision notes
+
+Notes are optional user-authored background data, with a category, source history event number, and source session ID. They are appended verbatim as a separate block of the reviewed checkpoint, bypassing generative rewriting. Later **Context Manager** summaries preserve valid note blocks and their provenance, including after a session reload. Ordinary user/assistant messages quoting the note format are not promoted to persistent notes. Notes are user-reviewed statements, not automatically verified facts.
+
+Changing a note invalidates the current preview. Each note is limited to 2,000 characters; a summary range can carry at most 32 notes and 16,000 note characters. Excess is rejected before model calls, without silently dropping notes. A range whose notes alone exceed its context budget is also rejected before generating a summary. Keep retains notes; Omit deliberately removes them from active context. Other compaction engines can summarize or remove these blocks, so this is not a permanent pin.
+
+IoT's compact thinking remains native reasoning and is excluded from summary input. Groups containing reasoning are labelled. Record decisions you want to preserve in the explicit note fields; the plugin does not extract or rewrite native reasoning or provider signatures.
+
+## Preview lifecycle
 
 The footer shows the approximate token count of selected groups before replacement, and distinguishes paid summary requests from omission-only previews that do not call the model. When a preview is ready, focus moves to its review checkbox. Generate preview stays disabled while that preview is available, avoiding duplicate summary requests; use **Discard preview** or change the selection to prepare another. Expired previews are removed automatically. A cancelled request cannot restore its preview if a response arrives late.
 
@@ -74,7 +103,7 @@ Source review on 2026-10-02 identified useful complementary approaches:
 - [Context Compression Selector](https://github.com/WilliamShi666/dsh-context-compression-selector) offers automatic tool-output reduction and model-specific token accounting. Its explicit distinction between tokenizer counts, estimates, and unavailable counts is a useful direction for improving this panel's approximate breakdown. No tokenizer or reducer from that project is bundled here.
 - [dsh-context-management](https://github.com/overact/dsh-context-management) provides history recall and session notes alongside automatic compaction. Read-only retrieval of original messages would be a useful future addition here; retaining the log does not currently give the model a recall tool.
 
-These three projects have not been tested for live interoperability. This plugin remains a manual, reviewed compaction interface. Automatic policy, precise provider accounting, permanent pins, history recall tools, and undo remain future work.
+These three projects have not been tested for live interoperability. This plugin remains a manual, reviewed compaction interface. Automatic policy, precise next-request accounting, permanent pins, model-facing history recall tools, and undo remain future work. Human-facing original-message inspection and explicit reviewed notes are available as described above.
 
 ## Installed-plugin compatibility check
 
@@ -103,7 +132,7 @@ The manifest includes the Store-specific `dsh.compatibility` matrix as well as t
 | --- | --- |
 | Conversation data | Reads the selected session's active history to estimate usage and build a preview. Recorded reasoning is excluded from summary input and client excerpts. |
 | Persistent changes | After the user reviews and applies a preview, writes standard compaction events through Harness session persistence. Original log entries remain. There is no undo button; Keep is not a permanent pin. |
-| Network and cost | Summary generation uses the configured Harness LLM service and may send selected transcript text to its provider and incur usage charges. Omission-only previews make no model request. |
+| Network and cost | Summary generation uses the configured Harness LLM service and may send selected transcript text to its provider and incur usage charges. Omission-only previews make no model request. Explicit ACP status reads invoke the installed `acp_status` tool through Harness policy; that tool may contact its own engine. |
 | Credentials | Uses the host's configured LLM service; does not request, display, or directly read provider credentials. |
 | Files and processes | No direct filesystem, shell, native executable, package installation, Profile modification, or restart API in shipped runtime code. Session persistence is an indirect disk-write effect handled by Harness. |
 | Dependencies | Host-supplied DSH services and React; no bundled native tools, external server, or production npm dependencies. The committed host bundle installs without `prepare` or install hooks; `prepack` is a maintainer packaging step. |

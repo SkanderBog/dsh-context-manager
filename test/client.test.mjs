@@ -133,3 +133,74 @@ test('Context panel requires a reviewed preview, consumes failed apply, and refr
   await act(async () => root.render(null))
   assert.equal(decoration.available({ sessionId: 'demo' }), false)
 })
+
+test('panel separates usage, reads ACP and originals on demand, and invalidates previews when notes change', async t => {
+  const dom = new JSDOM('<!doctype html><html><head></head><body><main></main></body></html>', { url: 'http://localhost' })
+  const saved = new Map()
+  for (const name of ['window', 'document', 'HTMLElement', 'HTMLInputElement', 'Event', 'MouseEvent']) { saved.set(name, globalThis[name]); globalThis[name] = dom.window[name] }
+  dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true }
+  let plugin
+  const components = new Map(), cleanups = [], calls = []
+  vm.runInNewContext(await readFile(process.env.DSH_CONTEXT_CLIENT_ENTRY ?? new URL('../src/client.js', import.meta.url), 'utf8'), {
+    window: { __ModuleLoader__: { load: entry => { plugin = entry.factory(require) } } },
+    document, Intl, AbortController, Map, JSON, Math, setTimeout, clearTimeout,
+  })
+  const snapshot = { fingerprint: 'before', totalTokens: 9000, percent: 90, contextWindow: 10000, breakdown: { thinking: 100 }, acpAvailable: true,
+    accounting: { lastRequest: { inputTokens: 1500, outputTokens: 200, provider: 'test', model: 'fixture' } },
+    groups: [{ id: '1', seqs: [1, 2], tokens: 8000, excerpt: 'Prior investigation', hasReasoning: true, locked: false, notes: [{ kind: 'decision', text: 'Existing choice', sourceSeq: 0 }] }, { id: '9', seqs: [9], tokens: 1000, excerpt: 'Latest', locked: true }] }
+  const ctx = {
+    slots: { inject(_name, callback) { return callback() }, register(entry, component) { components.set(entry.name, component); return () => {} } },
+    commandUi: { decorate() { return () => {} } },
+    effect(generator) { for (const cleanup of generator()) cleanups.push(cleanup) },
+    remote: { commands: { async execute(sid, line) {
+      assert.equal(sid, 'demo')
+      const payload = JSON.parse(line.slice('/context-manager '.length)); calls.push(payload)
+      let result
+      if (payload.op === 'inspect') result = snapshot
+      if (payload.op === 'acp-status') result = { text: 'Effective context: 1,400 tokens', source: 'acp_status' }
+      if (payload.op === 'history') result = { records: [{ seq: 20, origin: 'Context Manager', state: 'active', originalCount: 6, provider: 'test', model: 'fixture', text: 'Saved checkpoint', usage: null }], nextCursor: null }
+      if (payload.op === 'originals') result = { recordSeq: 20, messages: [{ seq: payload.offset ? 6 : 1, role: 'user', text: 'Original visible message', truncated: true }], total: 6, nextOffset: payload.offset ? null : 5 }
+      if (payload.op === 'preview') result = { id: 'notes-preview', expires: Date.now() + 600000, before: 9000, after: 3000, usage: { calls: 1, reportedCalls: 1, inputTokens: 300, outputTokens: 50 }, replacements: [{ seqs: [1, 2], action: 'summarize', before: 8000, after: 2000, summary: JSON.stringify(payload.notes) }] }
+      return { ok: true, value: { result: { kind: 'success', text: JSON.stringify(result ?? {}) } } }
+    } } },
+  }
+  plugin.apply(ctx)
+  const root = createRoot(document.querySelector('main'))
+  t.after(async () => { await act(async () => root.unmount()); for (const cleanup of cleanups.reverse()) cleanup(); dom.window.close(); for (const [name, value] of saved) globalThis[name] = value })
+  const Header = components.get('conversation.session.header.actions')
+  await act(async () => root.render(React.createElement(Header, { sessionId: 'demo', useProjection: () => null })))
+  const click = async label => { const button = [...document.querySelectorAll('button')].find(button => button.textContent === label); assert(button, label); await act(async () => button.click()) }
+  await click('Context')
+  assert.match(document.body.textContent, /Local context: ~9,000/)
+  assert.match(document.body.textContent, /1,500 input \+ 200 output/)
+  assert.equal(calls.length, 1, 'Opening the panel never invokes an external tool')
+  await click('Read ACP status')
+  assert.match(document.body.textContent, /Effective context: 1,400/)
+  assert.match(document.body.textContent, /Local context: ~9,000/, 'ACP does not overwrite the host estimate')
+  await click('Load compression history')
+  await click('View originals for record 20')
+  assert.match(document.querySelector('[aria-label="Original messages"]').textContent, /Original visible message/)
+  assert.match(document.body.textContent, /Message display truncated/)
+  await click('Next originals')
+  assert.equal(calls.at(-1).offset, 5)
+  await click('Summarize older groups')
+  const textarea = document.querySelector('textarea[aria-label="Decision for history 1"]')
+  assert(textarea)
+  const change = async text => {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(textarea, text)
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+      textarea.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+  }
+  await change('Keep the bounded cache')
+  await click('Generate preview')
+  assert.equal(calls.find(call => call.op === 'preview').notes['1'].decision, 'Keep the bounded cache')
+  assert.match(document.querySelector('[aria-label="Compaction preview"]').textContent, /300 input \+ 50 output/)
+  await change('Keep the revised bounded cache')
+  assert.equal(document.querySelector('[aria-label="Compaction preview"]'), null)
+  assert(calls.some(call => call.op === 'discard'))
+  await click('Refresh')
+  assert.equal(document.querySelector('[aria-label="Original messages"]'), null)
+  assert(!document.body.textContent.includes('Effective context: 1,400'))
+})

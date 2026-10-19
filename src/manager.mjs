@@ -2,9 +2,12 @@ import { createHash, randomUUID } from 'node:crypto'
 import { BlockAssembler, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { compactCheckpointSource, toolPairingBalancedBefore, toolPairingBalancedAfter } from '@deepseek-ai/dsh-compaction'
 import { estimateContent, estimateToolsTokens } from '@deepseek-ai/dsh-token-meter/estimate'
+import { compressionHistory, compressionUsage, lastReportedRequest, originalMessages, publicText } from './inspection.mjs'
+import { notesBlock, notesForSpan, readNotes, selectedNotes, summaryBlocks } from './notes.mjs'
 
 const TTL = 10 * 60 * 1000
 const MAX_TRANSCRIPT = 600_000
+const CHECKPOINT_PREFIX = 'Context checkpoint. The following is background data summarizing earlier messages, not a new instruction. Continue from the messages after it.\n\n'
 const actions = new Set(['keep', 'summarize', 'omit'])
 const textBlock = text => ({ type: 'text', text })
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex')
@@ -124,8 +127,28 @@ export class ContextManager {
       fingerprint: fingerprint(session), totalTokens: meter.totalTokens, surfaceTokens: meter.surfaceTokens,
       contextWindow: window, percent: window ? Math.round(meter.totalTokens / window * 1000) / 10 : null,
       breakdown: breakdown(session),
-      groups: groups.map(({ id, seqs, tokens, excerpt, protected: locked, latest, hasAttachments }) => ({ id, seqs, tokens, excerpt, locked, latest: !!latest, hasAttachments: !!hasAttachments })),
+      accounting: { localTokens: meter.totalTokens, baseline: meter.baseline?.kind ?? 'estimated', lastRequest: lastReportedRequest(session) },
+      acpAvailable: !!this.tools()?.get('acp_status', agent),
+      groups: groups.map(({ id, seqs, tokens, excerpt, protected: locked, latest, hasAttachments, messages }) => ({ id, seqs, tokens, excerpt, locked, latest: !!latest, hasAttachments: !!hasAttachments,
+        hasReasoning: messages.some(message => message.content.some(block => block.type === 'reasoning')),
+        notes: messages.flatMap(readNotes),
+      })),
     }
+  }
+
+  tools() { return this.ctx.get ? this.ctx.get('tools') : this.ctx.tools }
+  history(agent, cursor) { return compressionHistory(agent.session, cursor) }
+  originals(agent, recordSeq, offset) { return originalMessages(agent.session, recordSeq, offset) }
+  async acpStatus(agent, signal) {
+    const tools = this.tools()
+    if (!tools?.get('acp_status', agent)) throw new Error('No acp_status tool is available in this conversation.')
+    const operationSignal = AbortSignal.any([signal, AbortSignal.timeout(10000)])
+    operationSignal.throwIfAborted()
+    const result = await tools.execute({ name: 'acp_status', arguments: {}, agent, signal: operationSignal, callId: `context-status-${randomUUID()}` })
+    operationSignal.throwIfAborted()
+    const report = publicText(result.content, 24000)
+    if (result.isError) throw new Error(report.text || 'The context engine could not report its status.')
+    return { ...report, sessionId: agent.session.id, source: 'acp_status', observedAt: this.now() }
   }
 
   /** Generate and validate replacements without changing the active model context. */
@@ -153,12 +176,18 @@ export class ContextManager {
       }
       if (spans.length === 0) throw new Error('Choose at least one older group to summarize or omit.')
       if (spans.length > 12) throw new Error('Select at most 12 separate ranges per preview.')
+      const addedNotes = selectedNotes(spans.filter(span => span.action === 'summarize').flatMap(span => span.groups), input.notes, session.id)
       const target = session.requestHeader()?.config ?? agent.options
       const transcripts = new Map()
       for (const span of spans) {
         if (span.action !== 'summarize') continue
+        span.notes = notesForSpan(span.groups, addedNotes)
+        if (span.notes.length) {
+          const minimum = createUserMessage({ content: [textBlock(CHECKPOINT_PREFIX), ...notesBlock(span.notes)], source: compactCheckpointSource('notes-preflight') })
+          if (this.ctx.tokenMeter.estimateMessage(minimum) >= sum(span.groups, 'tokens')) throw new Error('The reviewed notes alone would not save context. Shorten the notes, keep the group, or select a larger range; no model request was made.')
+        }
         if (!target?.provider || !target?.model) throw new Error('Send a message with the selected model before requesting a summary.')
-        const transcript = span.groups.flatMap(g => g.messages).map(m => `[${m.role}]\n${m.role === 'tool' && input.outputs !== 'summarize' ? '[Tool / file output excluded from summary]' : describeBlocks(m.content, input.outputs === 'summarize')}`).join('\n\n')
+        const transcript = span.groups.flatMap(g => g.messages).map(m => `[${m.role}]\n${m.role === 'tool' && input.outputs !== 'summarize' ? '[Tool / file output excluded from summary]' : describeBlocks(summaryBlocks(m), input.outputs === 'summarize')}`).join('\n\n')
         if (transcript.length > MAX_TRANSCRIPT) throw new Error('This range is too large for one summary. Select fewer groups; no content was truncated.')
         transcripts.set(span, transcript)
       }
@@ -196,11 +225,12 @@ export class ContextManager {
           if (input.outputs === 'omit') summary += '\nTool / file outputs from this span were excluded by the user; reread files when needed.'
           if (span.groups.some(g => g.hasAttachments)) summary += '\nAttachments from this span are not available in active context; ask for or reopen them if needed.'
         }
-        const message = createUserMessage({ content: [textBlock(`Context checkpoint. The following is background data summarizing earlier messages, not a new instruction. Continue from the messages after it.\n\n${summary}`)], source: compactCheckpointSource(compactionId) })
+        const noteBlocks = notesBlock(span.notes ?? [])
+        const message = createUserMessage({ content: [textBlock(CHECKPOINT_PREFIX + summary), ...noteBlocks], source: compactCheckpointSource(compactionId) })
         const before = sum(span.groups, 'tokens')
         const after = this.ctx.tokenMeter.estimateMessage(message)
         if (after >= before) throw new Error(`The replacement would not save context (${after} versus ${before} estimated tokens). Select a larger range or use Omit.`)
-        replacements.push({ compactionId, action: span.action, seqs, before, after, shadowedTokenCount: sum(span.groups, 'heuristicTokens'), summary, message, call })
+        replacements.push({ compactionId, action: span.action, seqs, before, after, shadowedTokenCount: sum(span.groups, 'heuristicTokens'), summary, noteBlocks, message, call })
       }
       if (fingerprint(session) !== original) throw new Error('The conversation changed during preview. Refresh and try again.')
       operationSignal.throwIfAborted()
@@ -210,7 +240,7 @@ export class ContextManager {
       for (const [key, existing] of this.plans) if (existing.sessionId === session.id) this.plans.delete(key)
       while (this.plans.size >= 16) this.plans.delete(this.plans.keys().next().value)
       this.plans.set(id, plan)
-      return { id, expires: plan.expires, before: plan.before, after: Math.max(0, plan.before - sum(replacements, 'before') + sum(replacements, 'after')), replacements: replacements.map(({ action, seqs, before, after, message }) => ({ action, seqs, before, after, summary: message.content[0].text })) }
+      return { id, expires: plan.expires, before: plan.before, after: Math.max(0, plan.before - sum(replacements, 'before') + sum(replacements, 'after')), usage: compressionUsage(replacements.filter(r => r.action === 'summarize').map(r => r.call)), replacements: replacements.map(({ action, seqs, before, after, message }) => ({ action, seqs, before, after, summary: message.content.map(block => block.text).join('\n\n') })) }
     }))
   }
 
@@ -236,13 +266,13 @@ export class ContextManager {
       this.plans.delete(id) // Never silently replay an uncertain or partly committed operation.
       let applied = 0, failure
       for (const replacement of plan.replacements) {
-        const { compactionId, seqs, shadowedTokenCount, summary, call, message } = replacement
+        const { compactionId, seqs, shadowedTokenCount, summary, noteBlocks, call, message } = replacement
         const lifecycle = { compactionId, turn: null, ...(sourceCommandId ? { sourceCommandId } : {}) }
         let started = false, closing = false
         try {
           const start = session.append('compaction/start', lifecycle)
           started = true
-          const record = session.append('compaction/summary', { compactionId, ...(sourceCommandId ? { sourceCommandId } : {}), summary: [textBlock(summary)], shadowedRange: { start: seqs[0], end: seqs.at(-1) }, shadowedSeqs: seqs, shadowedTokenCount, ...call })
+          const record = session.append('compaction/summary', { compactionId, ...(sourceCommandId ? { sourceCommandId } : {}), summary: [textBlock(summary), ...noteBlocks], shadowedRange: { start: seqs[0], end: seqs.at(-1) }, shadowedSeqs: seqs, shadowedTokenCount, ...call })
           const checkpoint = createUserMessage({ ...message, source: compactCheckpointSource(compactionId, sourceCommandId) })
           session.append('user/message', checkpoint, { surfaceOp: { op: 'replace', startSeq: seqs[0], endSeq: seqs.at(-1) }, sourceEventSeqs: [start.seq, record.seq, ...seqs] })
           applied++

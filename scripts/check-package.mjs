@@ -18,7 +18,9 @@ try {
     'package.json',
     'src/client.js',
     'src/index.mjs',
+    'src/inspection.mjs',
     'src/manager.mjs',
+    'src/notes.mjs',
   ])
   execFileSync('tar', ['-xzf', join(directory, packed.filename), '-C', directory])
   const result = spawnSync(process.execPath, ['test/all.mjs'], {
@@ -32,7 +34,7 @@ try {
   })
   if (result.error) throw result.error
   assert.equal(result.status, 0, 'Packed plugin tests failed')
-  console.log(`Verified ${packed.filename}: nine public files; packed host and browser tests passed.`)
+  console.log(`Verified ${packed.filename}: ${packed.files.length} public files; packed host and browser tests passed.`)
 } finally {
   await rm(directory, { recursive: true, force: true })
 }
