@@ -120,6 +120,17 @@ test('preview makes a tool-free summary, excludes reasoning, and leaves model co
   assert(JSON.stringify(f.calls).includes('FILE_CONTENT_SENTINEL'))
 })
 
+test('summary preserves the routed opaque reasoning effort without copying unrelated generation settings', async t => {
+  const f = await fixture(t)
+  f.agent.options.reasoningEffort = 'unsent-composer-effort'
+  f.session.append('request/header', { reason: 'change', header: { config: { provider: 'test', model: 'fixture', reasoningEffort: 'provider-specific-off', maxTokens: 64000, temperature: 1.2, stop: ['stop'] } } })
+  await f.manager.preview(f.agent, f.selection(), signal())
+  assert.equal(f.calls[0].reasoningEffort, 'provider-specific-off')
+  assert.equal(f.calls[0].maxTokens, 2048, 'Keep the existing bounded summary budget')
+  assert.equal(f.calls[0].temperature, undefined)
+  assert.equal(f.calls[0].stop, undefined)
+})
+
 test('apply uses core checkpoints, preserves kept reasoning/signatures and replays without plugin', async t => {
   const f = await fixture(t)
   const original = f.session.snapshotEvents()
