@@ -1,6 +1,6 @@
 {
   "name": "dsh-context-manager",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Preview and selectively compact DeepSeek Harness conversation context",
   "type": "module",
   "license": "MIT",

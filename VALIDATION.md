@@ -1,5 +1,15 @@
 # Validation
 
+## v0.2.1 release validation — 2026-11-02
+
+The final extracted package passes **59 tests** on both Harness **0.2.1-rc.5** and **0.2.2-alpha.2**. This includes the real native executor on alpha, balanced history/persistence/replay checks, preflight costs, explicit stream completion, projection cancellation, correlated ACP results, and six browser component tests. Each new failure regression was first reproduced against earlier source.
+
+The extracted host also passes the actual DeepSeek adapter probe on both versions: Off/Low/High/Max/default reasoning, an arbitrary model ID, tool-free compaction serialization, parsed usage and normalized provider failures. The HTTP boundary is controlled in memory, with no paid provider call or account access. New-model answer quality remains outside this test.
+
+Chrome 152 checks passed at **1280 × 800** and **360 × 800**, covering retry, never-settling cancellation, late-response isolation, notes/history/originals, focus, visible review/footer controls, apply confirmation, and Escape focus restoration. No browser/console errors or horizontal overflow were observed. The rc.5 header-slot and command-decoration contracts were inspected against the installed official packages.
+
+The CI matrix retains older runtimes and Linux/macOS/Windows package checks, adding exact rc.5 / alpha.2 Cordis families and extracted-model probes. Release publication requires every lane to pass. These are API/package and controlled-browser checks, not certification of the packaged Desktop v0.30.0 GUI, combined live third-party engines, or every provider. The installed DSH profile is not updated by this release; Store admission remains independent.
+
 ## v0.2.0 release validation — 2026-10-19
 
 - Source and extracted-package suites pass 44 tests. History navigation now covers older/newer pages, empty pages, cursor zero, clearing the originals view, and refresh resetting the navigation trail.
