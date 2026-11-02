@@ -123,6 +123,8 @@ The profile must already contain Rewind, Better Sidebar and DSH Market. The scri
 
 All selected summary ranges are checked against the transcript limit before the first model request. An oversized later range therefore leaves history unchanged without charging an earlier summary request. Omit-only ranges do not require a model or summary transcript.
 
+The same preflight checks every omission marker and each summary's retained output text, reviewed notes, and checkpoint framing. If that required text already prevents any context savings, the entire preview is rejected before making a model request, including when the invalid range comes after another selected summary. A generated summary can still be too long; that is checked again before offering a preview.
+
 CI tests packed host and browser artifacts on Linux, macOS and Windows. The pinned baseline is Harness `0.2.0-rc.2`; additional Linux/Node 24 lanes exercise `0.2.1-alpha.1`, `0.2.1-alpha.2`, and `0.2.1-rc.2` without changing the release dependency pins. These are plugin/runtime checks, not packaged desktop GUI tests.
 
 
