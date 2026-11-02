@@ -283,6 +283,29 @@ test('a rewind during summary generation cancels the model call without waiting 
   assert.equal(f.manager.plans.size, 0)
 })
 
+test('message projections cancel a streaming preview even without a surface operation', async t => {
+  let project
+  const f = await fixture(t, { beforeStream: request => {
+    const event = project()
+    assert.equal(event.surfaceOp, undefined)
+    assert(request.signal.aborted, 'A projected message change must promptly cancel the obsolete request')
+    request.signal.throwIfAborted()
+  } })
+  const fiber = await f.ctx.plugin({ name: 'fixture-message-projection', inject: ['sessions'], apply(context) {
+    context.sessions.registerMessageProjection({ type: 'fixture/message-projection', project(event, history) {
+      const source = history.events[event.data.seq - history.baseSeq].data
+      return new Map([[event.data.seq, Object.freeze({ ...source, content: [block('Updated projected context')] })]])
+    } })
+  } })
+  t.after(() => fiber.dispose())
+  const seq = f.inspect().groups.find(group => !group.locked).seqs[0]
+  const generation = f.session.surface.contentGeneration
+  project = () => f.session.append('fixture/message-projection', { seq })
+  await assert.rejects(f.manager.preview(f.agent, f.selection(), signal()), /changed during preview/)
+  assert(f.session.surface.contentGeneration > generation)
+  assert.equal(f.manager.plans.size, 0)
+})
+
 test('preview guards ignore other sessions and non-context events and detach after completion', async t => {
   let unrelated
   const f = await fixture(t, { beforeStream: async request => { unrelated(); assert.equal(request.signal.aborted, false) } })
