@@ -16,12 +16,23 @@ jobs:
           - os: ubuntu-latest
             node: 24
             harness: 0.2.1-alpha.1
+            cordis: 4.0.5-alpha.1
           - os: ubuntu-latest
             node: 24
             harness: 0.2.1-alpha.2
+            cordis: 4.0.5-alpha.1
           - os: ubuntu-latest
             node: 24
             harness: 0.2.1-rc.2
+            cordis: 4.0.5
+          - os: ubuntu-latest
+            node: 24
+            harness: 0.2.1-rc.5
+            cordis: 4.0.5
+          - os: ubuntu-latest
+            node: 24
+            harness: 0.2.2-alpha.2
+            cordis: 4.0.6-alpha.1
           - os: macos-latest
             node: 24
             harness: 0.2.0-rc.2
@@ -42,6 +53,8 @@ jobs:
         shell: bash
         env:
           HARNESS_TEST_VERSION: ${{ matrix.harness }}
+          HARNESS_CORDIS_VERSION: ${{ matrix.cordis }}
+          NODE_OPTIONS: --max-old-space-size=1024
         run: |
           node --input-type=module <<'JS'
           import { readFileSync, writeFileSync } from 'node:fs'
@@ -52,7 +65,8 @@ jobs:
           for (const name of Object.keys(manifest.devDependencies)) {
             if (name.startsWith('@deepseek-ai/dsh-')) manifest.devDependencies[name] = process.env.HARNESS_TEST_VERSION
           }
-          manifest.devDependencies['@deepseek-ai/cordis'] = process.env.HARNESS_TEST_VERSION === '0.2.1-rc.2' ? '4.0.5' : '4.0.5-alpha.1'
+          if (process.env.HARNESS_TEST_VERSION.startsWith('0.2.2-')) manifest.devDependencies['@deepseek-ai/dsh-tool-executor-native'] = process.env.HARNESS_TEST_VERSION
+          manifest.devDependencies['@deepseek-ai/cordis'] = process.env.HARNESS_CORDIS_VERSION
           try {
             writeFileSync('package.json', JSON.stringify(manifest))
             execFileSync('npm', ['install', '--package-lock=false', '--ignore-scripts', '--no-audit', '--no-fund'], { stdio: 'inherit' })

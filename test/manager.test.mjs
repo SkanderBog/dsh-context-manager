@@ -346,6 +346,7 @@ test('real AgentLoop, command registry, JSONL persistence and plugin disposal wo
     async *stream() { yield { type: 'block-end', index: 0, block: block('The prior task is complete. Continue the remaining task.') }; yield { type: 'finish', reason: { kind: 'stop' } } }
   }
   for (const mod of [SessionStore, SessionProjectionRegistry, AgentRegistry, TestLlm, ToolRuntime, SystemPrompt, TokenMeter, Commands, ...invariantPlugins]) fibers.push(await ctx.plugin(mod))
+  if (typeof ctx.tools.setExecutor === 'function') fibers.push(await ctx.plugin(await import('@deepseek-ai/dsh-tool-executor-native')))
   fibers.push(await ctx.plugin(JsonlPersistence, { root, compression: 'none' }))
   fibers.push(await ctx.plugin(AgentLoop, {}))
   const pluginFiber = await ctx.plugin(plugin); fibers.push(pluginFiber)
