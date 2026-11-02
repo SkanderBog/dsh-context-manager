@@ -31,8 +31,10 @@ export function fingerprint(session) {
 
 async function guardPreview(ctx, session, signals, operation) {
   const changed = new AbortController()
+  const contentGeneration = session.surface.contentGeneration
   const dispose = ctx.on('session/event', (updated, event) => {
-    if (updated.id === session.id && (event.surfaceOp || event.type === 'request/header' || event.type === 'request/context'))
+    if (updated.id === session.id && (event.surfaceOp || event.type === 'request/header' || event.type === 'request/context'
+      || (contentGeneration !== undefined && session.surface.contentGeneration !== contentGeneration)))
       changed.abort(new Error('The conversation changed during preview. Refresh and try again.'))
   })
   try { return await operation(AbortSignal.any([...signals, changed.signal])) }
