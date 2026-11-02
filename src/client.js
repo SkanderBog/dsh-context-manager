@@ -20,6 +20,7 @@ window.__ModuleLoader__.load({
 
     function ContextPanel({ ctx, sessionId, close, updateMeter }) {
       const dialog = useRef(null)
+      const body = useRef(null)
       const abort = useRef(null)
       const mounted = useRef(true)
       const currentPlan = useRef(null)
@@ -54,8 +55,18 @@ window.__ModuleLoader__.load({
         abort.current = controller
         setBusy(label); setError('')
         try { await task(controller.signal) } catch (e) {
-          if (mounted.current) setError(controller.signal.aborted ? 'Operation cancelled. Refresh before applying another preview.' : e.message)
-        } finally { abort.current = null; if (mounted.current) setBusy('') }
+          if (mounted.current && abort.current === controller) setError(controller.signal.aborted ? 'Operation cancelled. Refresh before applying another preview.' : e.message)
+        } finally {
+          if (abort.current === controller) { abort.current = null; if (mounted.current) setBusy('') }
+        }
+      }
+      const cancel = () => {
+        const controller = abort.current
+        if (!controller) return
+        // A remote may settle late (or never). Release this operation locally,
+        // while its aborted signal prevents late results from changing the panel.
+        abort.current = null; controller.abort(); setBusy('')
+        setError('Operation cancelled. Refresh before applying another preview.')
       }
       const invalidate = () => {
         const previous = currentPlan.current
@@ -72,7 +83,9 @@ window.__ModuleLoader__.load({
         dialog.current.showModal()
         void run('Loading context…', refresh)
         return () => {
-          mounted.current = false; abort.current?.abort()
+          mounted.current = false
+          const controller = abort.current
+          abort.current = null; controller?.abort()
           const previous = currentPlan.current
           if (previous) void request({ op: 'discard', id: previous.id }).catch(() => {})
           if (previouslyFocused?.isConnected) previouslyFocused.focus()
@@ -83,6 +96,11 @@ window.__ModuleLoader__.load({
         reviewInput.current?.focus()
         reviewInput.current?.scrollIntoView?.({ block: 'nearest' })
       }, [plan, busy])
+      useEffect(() => {
+        // Applying removes the preview near the end of the panel. Show the
+        // refreshed totals and confirmation instead of retaining that scroll.
+        if (snapshot && body.current) body.current.scrollTop = 0
+      }, [snapshot])
       useEffect(() => {
         if (!plan) return
         const timer = setTimeout(() => {
@@ -137,10 +155,11 @@ window.__ModuleLoader__.load({
       const usageLabel = usage => !usage ? 'Usage not reported' : usage.inputTokens === null ? 'Token usage not reported by the provider' : `${format(usage.inputTokens)} input + ${format(usage.outputTokens)} output tokens`
       return createPortal(h('dialog', { ref: dialog, className: 'dcm', 'aria-labelledby': 'dcm-title', onCancel: event => { event.preventDefault(); if (!busy.startsWith('Applying')) close() } },
         h('header', null, h('div', null, h('h2', { id: 'dcm-title' }, 'Context manager'), h('div', { className: 'dcm-muted' }, 'Choose what the model carries into its next reply.')), h('button', { onClick: close, disabled: busy.startsWith('Applying'), 'aria-label': 'Close context manager' }, 'Close')),
-        h('div', { className: 'dcm-body', 'aria-busy': !!busy },
+        h('div', { ref: body, className: 'dcm-body', 'aria-busy': !!busy },
           error && h('div', { className: 'dcm-error', role: 'alert' }, error),
           notice && h('div', { className: 'dcm-success', role: 'status' }, notice),
           busy && h('p', { role: 'status' }, busy),
+          !snapshot && !busy && h('button', { onClick: () => run('Loading context…', refresh) }, 'Retry loading context'),
           snapshot && h(React.Fragment, null,
             h('div', { className: 'dcm-row' }, h('strong', null, `Local context: ~${format(snapshot.totalTokens)} tokens`), h('span', null, snapshot.contextWindow ? `of ${format(snapshot.contextWindow)} · ${snapshot.percent}% estimated` : 'Context limit not reported by this model'), h('button', { disabled: !!busy, onClick: () => run('Refreshing context…', refresh) }, 'Refresh')),
             h('div', { className: 'dcm-meter', 'aria-hidden': true }, h('span', { style: { width: `${Math.min(100, snapshot.percent ?? 0)}%` } })),
@@ -198,7 +217,7 @@ window.__ModuleLoader__.load({
               h('label', { className: 'dcm-check' }, h('input', { ref: reviewInput, type: 'checkbox', checked: reviewed, disabled: !!busy, onChange: e => setReviewed(e.target.checked) }), 'I reviewed the replacement text.')))),
         h('footer', null,
           h('span', { className: 'dcm-muted', role: 'status' }, `${selected} group(s) selected${selected ? ` · ~${format(selectedTokens)} tokens before replacement` : ''}. ${usesModel ? 'Summary previews use your model and may incur normal usage.' : selected ? 'Omission-only previews do not call the model.' : 'Select older history to summarize or omit.'}`),
-          h('div', { className: 'dcm-row' }, busy && !busy.startsWith('Applying') && h('button', { onClick: () => abort.current?.abort() }, 'Cancel operation'), plan && h('button', { disabled: !!busy, onClick: () => { invalidate(); setNotice('Preview discarded. Context is unchanged.') } }, 'Discard preview'), h('button', { disabled: !!busy || !selected || !!plan, onClick: preview }, 'Generate preview'), h('button', { className: 'dcm-primary', disabled: !!busy || !plan || !reviewed, onClick: apply }, 'Apply preview')))), document.body)
+          h('div', { className: 'dcm-row' }, busy && !busy.startsWith('Applying') && h('button', { onClick: cancel }, 'Cancel operation'), plan && h('button', { disabled: !!busy, onClick: () => { invalidate(); setNotice('Preview discarded. Context is unchanged.') } }, 'Discard preview'), h('button', { disabled: !!busy || !selected || !!plan, onClick: preview }, 'Generate preview'), h('button', { className: 'dcm-primary', disabled: !!busy || !plan || !reviewed, onClick: apply }, 'Apply preview')))), document.body)
     }
 
     function apply(ctx) {
@@ -207,7 +226,8 @@ window.__ModuleLoader__.load({
         const [open, setOpen] = useState(false)
         const pressure = useProjection('contextPressure')
         const tokens = pressure?.projectedTokens ?? pressure?.pressureTokens
-        const percent = pressure?.contextWindow && tokens !== undefined ? Math.round(tokens / pressure.contextWindow * 100) : null
+        const contextWindow = pressure?.contextWindow
+        const percent = Number.isFinite(contextWindow) && contextWindow > 0 && Number.isFinite(tokens) && tokens >= 0 ? Math.round(tokens / contextWindow * 100) : null
         useEffect(() => {
           const openPanel = () => setOpen(true)
           const views = listeners.get(sessionId) ?? new Set()
