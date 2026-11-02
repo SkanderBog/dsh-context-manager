@@ -73,7 +73,7 @@ async function fixture(t, options = {}) {
     if (options.throwStream) throw new Error('provider unavailable')
     yield { type: 'block-end', index: 0, block: block(options.summary ?? 'Keep the decisions and exact path /workspace/notes.txt. Next: continue the latest request.') }
     if (options.usage) yield { type: 'usage', usage: options.usage }
-    yield { type: 'finish', reason: { kind: options.finish ?? 'stop' } }
+    if (options.finish !== null) yield { type: 'finish', reason: typeof options.finish === 'object' ? options.finish : { kind: options.finish ?? 'stop' } }
   } }
   let active = false
   const maintenanceController = new AbortController()
@@ -280,6 +280,29 @@ test('a rewind during summary generation cancels the model call without waiting 
       { surfaceOp: { op: 'replace', startSeq: last, endSeq: last }, sourceEventSeqs: [last] })
   }
   await assert.rejects(f.manager.preview(f.agent, f.selection(), signal()), /changed during preview/)
+  assert.equal(f.manager.plans.size, 0)
+})
+
+test('message projections cancel a streaming preview even without a surface operation', async t => {
+  let project
+  const f = await fixture(t, { beforeStream: request => {
+    const event = project()
+    assert.equal(event.surfaceOp, undefined)
+    assert(request.signal.aborted, 'A projected message change must promptly cancel the obsolete request')
+    request.signal.throwIfAborted()
+  } })
+  const fiber = await f.ctx.plugin({ name: 'fixture-message-projection', inject: ['sessions'], apply(context) {
+    context.sessions.registerMessageProjection({ type: 'fixture/message-projection', project(event, history) {
+      const source = history.events[event.data.seq - history.baseSeq].data
+      return new Map([[event.data.seq, Object.freeze({ ...source, content: [block('Updated projected context')] })]])
+    } })
+  } })
+  t.after(() => fiber.dispose())
+  const seq = f.inspect().groups.find(group => !group.locked).seqs[0]
+  const generation = f.session.surface.contentGeneration
+  project = () => f.session.append('fixture/message-projection', { seq })
+  await assert.rejects(f.manager.preview(f.agent, f.selection(), signal()), /changed during preview/)
+  assert(f.session.surface.contentGeneration > generation)
   assert.equal(f.manager.plans.size, 0)
 })
 
@@ -592,4 +615,62 @@ test('notes that already exceed the selected context are rejected without chargi
   const group = view.groups.find(group => group.excerpt.startsWith('Small source'))
   await assert.rejects(f.manager.preview(f.agent, { fingerprint: view.fingerprint, choices: { [group.id]: 'summarize' }, outputs: 'summarize', notes: { [group.id]: { decision: 'A large note. '.repeat(70) } } }, signal()), /notes alone would not save/)
   assert.equal(f.calls.length, 0)
+})
+
+test('an unsavable later omission is rejected before an earlier paid summary', async t => {
+  const f = await fixture(t)
+  f.user('Tiny old request'); f.user('Latest request')
+  const view = f.inspect()
+  const first = view.groups.find(group => !group.locked)
+  const tiny = view.groups.find(group => group.excerpt === 'Tiny old request')
+  const before = f.session.snapshotEvents()
+  await assert.rejects(f.manager.preview(f.agent, { fingerprint: view.fingerprint, choices: { [first.id]: 'summarize', [tiny.id]: 'omit' }, outputs: 'summarize' }, signal()), /omitted range is too small.*no model request/)
+  assert.equal(f.calls.length, 0)
+  assert.equal(f.manager.plans.size, 0)
+  assert.deepEqual(f.session.snapshotEvents(), before)
+})
+
+test('retained output and notes are checked together before a paid summary', async t => {
+  const f = await fixture(t)
+  f.user('Read the complete output. ' + 'x'.repeat(1000))
+  f.assistant([{ type: 'tool-call', id: 'call-preflight', name: 'read_file', arguments: '{}' }])
+  f.session.append('tool/result', { turn: 0, step: 0, message: createToolResultMessage({ callId: 'call-preflight', content: [block('y'.repeat(5000))], isError: false }) }, { surfaceOp: 'append' })
+  f.assistant([block('Read successfully.')]); f.user('Latest request')
+  const view = f.inspect()
+  const group = view.groups.find(group => group.excerpt.startsWith('Read the complete output.'))
+  const before = f.session.snapshotEvents()
+  await assert.rejects(f.manager.preview(f.agent, { fingerprint: view.fingerprint, choices: { [group.id]: 'summarize' }, outputs: 'keep', notes: { [group.id]: { decision: 'n'.repeat(2000) } } }, signal()), /retained output text, notes.*no model request/)
+  assert.equal(f.calls.length, 0)
+  assert.equal(f.manager.plans.size, 0)
+  assert.deepEqual(f.session.snapshotEvents(), before)
+})
+
+test('normalized model failures retain actionable diagnostics without leaking raw provider metadata', async t => {
+  for (const kind of ['error', 'aborted']) {
+    await t.test(kind, async t => {
+      const f = await fixture(t, { finish: { kind, failure: { code: 'MODEL_NOT_AVAILABLE', message: 'This account model is no longer offered. Refresh the model catalog.', requestId: 'PRIVATE_PROVIDER_METADATA' } } })
+      const before = f.session.snapshotEvents()
+      await assert.rejects(f.manager.preview(f.agent, f.selection(), signal()), error => {
+        assert.match(error.message, /MODEL_NOT_AVAILABLE: This account model is no longer offered/)
+        assert.match(error.message, /Context is unchanged/)
+        assert(!error.message.includes('PRIVATE_PROVIDER_METADATA'))
+        return true
+      })
+      assert.equal(f.calls.length, 1, 'Failed previews must not retry paid model requests')
+      assert.equal(f.manager.plans.size, 0)
+      assert.deepEqual(f.session.snapshotEvents(), before)
+    })
+  }
+})
+
+test('truncated and unterminated model streams explain the failure and cannot publish previews', async t => {
+  for (const finish of ['max-tokens', null]) {
+    await t.test(String(finish), async t => {
+      const f = await fixture(t, { finish })
+      const before = f.session.snapshotEvents()
+      await assert.rejects(f.manager.preview(f.agent, f.selection(), signal()), finish ? /reached its output limit/ : /no finish/)
+      assert.equal(f.manager.plans.size, 0)
+      assert.deepEqual(f.session.snapshotEvents(), before)
+    })
+  }
 })
