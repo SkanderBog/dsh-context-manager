@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 — 2026-11-02
+
+- Preflight omission markers and retained output/notes before any paid summary; reject incomplete streams without an explicit successful finish.
+- Report bounded provider failures and output-limit guidance; preserve the routed model's opaque reasoning effort.
+- Cancel obsolete summaries when projected context changes, including image/offload projections without surface append events.
+- Support Harness alpha batch tool executors for on-demand ACP status, validating correlated results without adding model-history events.
+- Restore retry/cancel controls for stalled requests, isolate late responses, support React effect replay, hide invalid usage percentages, and reveal refreshed totals after applying a preview.
+- Add Harness `0.2.1-rc.5` / `0.2.2-alpha.2` coverage and actual DeepSeek serializer/SSE/error checks against extracted release artifacts.
+
 ## 0.2.0 — 2026-10-19
 
 - Navigate back to newer compression-history pages, including across empty pages.

@@ -120,6 +120,17 @@ test('preview makes a tool-free summary, excludes reasoning, and leaves model co
   assert(JSON.stringify(f.calls).includes('FILE_CONTENT_SENTINEL'))
 })
 
+test('summary preserves the routed opaque reasoning effort without copying unrelated generation settings', async t => {
+  const f = await fixture(t)
+  f.agent.options.reasoningEffort = 'unsent-composer-effort'
+  f.session.append('request/header', { reason: 'change', header: { config: { provider: 'test', model: 'fixture', reasoningEffort: 'provider-specific-off', maxTokens: 64000, temperature: 1.2, stop: ['stop'] } } })
+  await f.manager.preview(f.agent, f.selection(), signal())
+  assert.equal(f.calls[0].reasoningEffort, 'provider-specific-off')
+  assert.equal(f.calls[0].maxTokens, 2048, 'Keep the existing bounded summary budget')
+  assert.equal(f.calls[0].temperature, undefined)
+  assert.equal(f.calls[0].stop, undefined)
+})
+
 test('apply uses core checkpoints, preserves kept reasoning/signatures and replays without plugin', async t => {
   const f = await fixture(t)
   const original = f.session.snapshotEvents()
@@ -369,6 +380,7 @@ test('real AgentLoop, command registry, JSONL persistence and plugin disposal wo
     async *stream() { yield { type: 'block-end', index: 0, block: block('The prior task is complete. Continue the remaining task.') }; yield { type: 'finish', reason: { kind: 'stop' } } }
   }
   for (const mod of [SessionStore, SessionProjectionRegistry, AgentRegistry, TestLlm, ToolRuntime, SystemPrompt, TokenMeter, Commands, ...invariantPlugins]) fibers.push(await ctx.plugin(mod))
+  if (typeof ctx.tools.setExecutor === 'function') fibers.push(await ctx.plugin(await import('@deepseek-ai/dsh-tool-executor-native')))
   fibers.push(await ctx.plugin(JsonlPersistence, { root, compression: 'none' }))
   fibers.push(await ctx.plugin(AgentLoop, {}))
   const pluginFiber = await ctx.plugin(plugin); fibers.push(pluginFiber)
@@ -673,4 +685,37 @@ test('truncated and unterminated model streams explain the failure and cannot pu
       assert.deepEqual(f.session.snapshotEvents(), before)
     })
   }
+})
+
+test('ACP status uses the selected batch executor on newer Harness without adding model events', async t => {
+  const f = await fixture(t)
+  let mode = 'success', call, controller
+  f.manager.ctx.tools = {
+    get: name => name === 'acp_status' ? {} : undefined,
+    setExecutor() { assert.fail('Status reads must not replace the host executor') },
+    async execute(input) {
+      call = input
+      const id = input.calls[0].id
+      if (mode === 'null') return null
+      if (mode === 'malformed') return { results: {} }
+      if (mode === 'cancel') controller.abort()
+      const result = { isError: mode === 'error', content: [block(mode === 'error' ? 'Engine is offline' : 'Batch status: 456 tokens')] }
+      return { results: mode === 'missing' ? [{ callId: 'unrelated', result }] : mode === 'duplicate' ? [{ callId: id, result }, { callId: id, result }] : [{ callId: id, result }], additionalContexts: [], concluded: false }
+    },
+  }
+  const before = f.session.snapshotEvents()
+  const result = await f.manager.acpStatus(f.agent, signal())
+  assert.match(result.text, /456 tokens/)
+  assert.equal(call.agent, f.agent)
+  assert.equal(call.calls.length, 1)
+  assert.equal(call.calls[0].name, 'acp_status')
+  assert.equal(call.calls[0].type, 'tool-call')
+  assert.deepEqual(JSON.parse(call.calls[0].arguments), {})
+  assert.equal(call.log, undefined)
+  mode = 'error'
+  await assert.rejects(f.manager.acpStatus(f.agent, signal()), /Engine is offline/)
+  for (mode of ['missing', 'duplicate', 'null', 'malformed']) await assert.rejects(f.manager.acpStatus(f.agent, signal()), /unique matching status result/)
+  mode = 'cancel'; controller = new AbortController()
+  await assert.rejects(f.manager.acpStatus(f.agent, controller.signal), /abort/i)
+  assert.deepEqual(f.session.snapshotEvents(), before)
 })

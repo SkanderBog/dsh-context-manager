@@ -41,7 +41,7 @@ IoT's compact thinking remains native reasoning and is excluded from summary inp
 
 The footer shows the approximate token count of selected groups before replacement, and distinguishes paid summary requests from omission-only previews that do not call the model. When a preview is ready, focus moves to its review checkbox. Generate preview stays disabled while that preview is available, avoiding duplicate summary requests; use **Discard preview** or change the selection to prepare another. Expired previews are removed automatically. A cancelled request cannot restore its preview if a response arrives late.
 
-Summary requests start with the conversation's most recently routed model and may incur normal model usage. A host plugin can reroute requests marked `purpose: 'compaction'` to a dedicated summarizer. Changing an unsent composer selection alone does not set the summary model. An omission-only preview does not call the model. A preview makes no change to active context. It expires after ten minutes, a new preview, plugin reload, or a change to the conversation. Apply is permitted only while the agent is idle. A preview that expires or is discarded while the initial save is pending is rejected before any history changes.
+Summary requests start with the conversation's most recently routed model and reasoning effort and may incur normal model usage. Effort values are forwarded unchanged; when none was recorded, the provider default applies. The summary output limit remains 2,048 tokens. A host plugin can reroute requests marked `purpose: 'compaction'` to a dedicated summarizer; it must also clear or translate any effort unsupported by its replacement model. Changing an unsent composer selection alone does not set the summary model. An omission-only preview does not call the model. A preview makes no change to active context. It expires after ten minutes, a new preview, plugin reload, or a change to the conversation. Apply is permitted only while the agent is idle. A preview that expires or is discarded while the initial save is pending is rejected before any history changes.
 
 **Keep applies to this operation. It is not a permanent pin against Harness's automatic compaction.** Existing automatic compaction is left in place.
 
@@ -66,10 +66,10 @@ The context total uses Harness's token meter. Category estimates use its fixed t
 
 ## Install a packaged release
 
-Download the archive from [v0.2.0](https://github.com/SkanderBog/dsh-context-manager/releases/tag/v0.2.0).
+Download the archive from [v0.2.1](https://github.com/SkanderBog/dsh-context-manager/releases/tag/v0.2.1).
 
 ```sh
-dsh plugin --profile tauri add /absolute/path/dsh-context-manager-0.2.0.tgz
+dsh plugin --profile tauri add /absolute/path/dsh-context-manager-0.2.1.tgz
 ```
 
 Use your actual Harness profile name. The community Linux desktop uses `tauri` on the tested installation. Other Harness desktop distributions may use `desktop`; quit that desktop before changing its reserved profile. Restart Harness after updating the plugin: reloading the frontend or toggling a component can leave the previously imported host module cached.
@@ -90,6 +90,8 @@ npm pack
 ```
 
 Tests use Harness's real Session, token meter, compaction invariant companion, AgentLoop, command registry, and JSONL persistence with synthetic history and a controlled model. They cover retained reasoning, balanced tool pairs, selective ranges, read-only preview, cancellation, stale plans, save failures, and replay without the plugin. The package check validates the archive's exact public file list and reruns the host and browser suites against its extracted entries. They do not measure the quality of a real model's summary.
+
+`node scripts/check-models.mjs RUNTIME_ROOT [PLUGIN_ENTRY]` checks a separately installed Harness runtime with its actual DeepSeek Messages adapter and LLM service. A deterministic in-memory HTTP response verifies an arbitrary future model ID, Off/Low/High/Max/default reasoning serialization, the compaction marker, parsed usage, provider errors, and unchanged history. It makes no network or paid model request and does not certify live account access or summary quality.
 
 Control commands use Harness's existing authenticated command route. Their records stay outside model context. While installed, the plugin hides inspection/preview payloads from ordinary chat cards and displays a short successful-compaction record. Original control records remain in the session log.
 
@@ -123,16 +125,20 @@ The profile must already contain Rewind, Better Sidebar and DSH Market. The scri
 
 ### Compatibility and resource checks
 
+The November 2 API checks include current Harness `0.2.1-rc.5`, pinned by community Desktop `v0.30.0`, and upcoming `0.2.2-alpha.2`. On the alpha host, external ACP status dispatch uses the selected batch executor and matches its returned call ID; older hosts retain the single-call API. Provider-owned tool policy remains in the execution path. An alpha profile must mount an executor as required by Harness itself.
+
+Current model IDs and reasoning controls come from the routed request and owning adapter. The summary preserves an explicitly selected opaque effort while keeping its own 2,048-token output budget. The model probe tests the real DeepSeek request serializer and SSE parser with controlled responses; it performs no paid account calls and does not certify remote summary quality. CI runs this probe against the extracted archive on current rc.5 and alpha.2.
+
 All selected summary ranges are checked against the transcript limit before the first model request. An oversized later range therefore leaves history unchanged without charging an earlier summary request. Omit-only ranges do not require a model or summary transcript.
 
 The same preflight checks every omission marker and each summary's retained output text, reviewed notes, and checkpoint framing. If that required text already prevents any context savings, the entire preview is rejected before making a model request, including when the invalid range comes after another selected summary. A generated summary can still be too long; that is checked again before offering a preview.
 
-CI tests packed host and browser artifacts on Linux, macOS and Windows. The pinned baseline is Harness `0.2.0-rc.2`; additional Linux/Node 24 lanes exercise `0.2.1-alpha.1`, `0.2.1-alpha.2`, and `0.2.1-rc.2` without changing the release dependency pins. These are plugin/runtime checks, not packaged desktop GUI tests.
+CI tests packed host and browser artifacts on Linux, macOS and Windows. The pinned baseline is Harness `0.2.0-rc.2`; additional Linux/Node 24 lanes exercise `0.2.1-alpha.1`, `0.2.1-alpha.2`, `0.2.1-rc.2`, `0.2.1-rc.5`, and `0.2.2-alpha.2` without changing the release dependency pins. These are plugin/runtime checks, not packaged desktop GUI tests.
 
 
 ## Store compatibility and permissions
 
-The manifest includes the Store-specific `dsh.compatibility` matrix as well as the host's `engines.dsh` gate. Packed API tests pass on DSH `0.2.0-rc.2`, `0.2.1-alpha.1`, `0.2.1-alpha.2`, and `0.2.1-rc.2`. Linux, macOS and Windows packed-plugin tests exercise host and browser contracts, not packaged desktop GUIs. Web/desktop profiles need the stated conversation and command client modules; headless profiles expose only the command.
+The manifest includes the Store-specific `dsh.compatibility` matrix as well as the host's `engines.dsh` gate. Packed API tests pass on DSH `0.2.0-rc.2`, `0.2.1-alpha.1`, `0.2.1-alpha.2`, `0.2.1-rc.2`, `0.2.1-rc.5`, and `0.2.2-alpha.2`. Linux, macOS and Windows packed-plugin tests exercise host and browser contracts, not packaged desktop GUIs. Web/desktop profiles need the stated conversation and command client modules; headless profiles expose only the command.
 
 | Capability | Scope |
 | --- | --- |
