@@ -34,6 +34,7 @@ try {
   })
   if (result.error) throw result.error
   assert.equal(result.status, 0, 'Packed plugin tests failed')
+  if (process.env.DSH_CONTEXT_TEST_MODELS === 'true') execFileSync(process.execPath, [join(root, 'scripts/check-models.mjs'), root, join(directory, 'package/lib/index.mjs')], { stdio: 'inherit', timeout: 60000 })
   console.log(`Verified ${packed.filename}: ${packed.files.length} public files; packed host and browser tests passed.`)
 } finally {
   await rm(directory, { recursive: true, force: true })

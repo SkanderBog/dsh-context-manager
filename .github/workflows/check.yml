@@ -65,6 +65,7 @@ jobs:
           for (const name of Object.keys(manifest.devDependencies)) {
             if (name.startsWith('@deepseek-ai/dsh-')) manifest.devDependencies[name] = process.env.HARNESS_TEST_VERSION
           }
+          if (['0.2.1-rc.5', '0.2.2-alpha.2'].includes(process.env.HARNESS_TEST_VERSION)) manifest.devDependencies['@deepseek-ai/dsh-llm-deepseek'] = process.env.HARNESS_TEST_VERSION
           if (process.env.HARNESS_TEST_VERSION.startsWith('0.2.2-')) manifest.devDependencies['@deepseek-ai/dsh-tool-executor-native'] = process.env.HARNESS_TEST_VERSION
           manifest.devDependencies['@deepseek-ai/cordis'] = process.env.HARNESS_CORDIS_VERSION
           try {
@@ -76,4 +77,6 @@ jobs:
         env:
           DSH_CONTEXT_PLUGIN_ENTRY: ../lib/index.mjs
       - run: npm run test:package
+        env:
+          DSH_CONTEXT_TEST_MODELS: ${{ matrix.harness == '0.2.1-rc.5' || matrix.harness == '0.2.2-alpha.2' }}
       - run: git diff --exit-code -- lib/index.mjs
