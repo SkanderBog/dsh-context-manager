@@ -154,8 +154,20 @@ export class ContextManager {
     if (!tools?.get('acp_status', agent)) throw new Error('No acp_status tool is available in this conversation.')
     const operationSignal = AbortSignal.any([signal, AbortSignal.timeout(10000)])
     operationSignal.throwIfAborted()
-    const result = await tools.execute({ name: 'acp_status', arguments: {}, agent, signal: operationSignal, callId: `context-status-${randomUUID()}` })
+    const callId = `context-status-${randomUUID()}`
+    let result
+    if (typeof tools.setExecutor === 'function') {
+      // Harness 0.2.2 delegates batches to the selected executor. Omitting log
+      // keeps this explicit status request outside the model's active history.
+      const batch = await tools.execute({ calls: [{ type: 'tool-call', id: callId, name: 'acp_status', arguments: '{}' }], agent, signal: operationSignal })
+      const matches = batch.results?.filter(item => item.callId === callId) ?? []
+      if (matches.length !== 1) throw new Error('The context engine returned no unique matching status result.')
+      result = matches[0].result
+    } else {
+      result = await tools.execute({ name: 'acp_status', arguments: {}, agent, signal: operationSignal, callId })
+    }
     operationSignal.throwIfAborted()
+    if (!result || !Array.isArray(result.content)) throw new Error('The context engine returned an invalid status result.')
     const report = publicText(result.content, 24000)
     if (result.isError) throw new Error(report.text || 'The context engine could not report its status.')
     return { ...report, sessionId: agent.session.id, source: 'acp_status', observedAt: this.now() }

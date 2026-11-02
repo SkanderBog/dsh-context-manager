@@ -652,3 +652,34 @@ test('truncated and unterminated model streams explain the failure and cannot pu
     })
   }
 })
+
+test('ACP status uses the selected batch executor on newer Harness without adding model events', async t => {
+  const f = await fixture(t)
+  let mode = 'success', call, controller
+  f.manager.ctx.tools = {
+    get: name => name === 'acp_status' ? {} : undefined,
+    setExecutor() { assert.fail('Status reads must not replace the host executor') },
+    async execute(input) {
+      call = input
+      const id = input.calls[0].id
+      if (mode === 'cancel') controller.abort()
+      const result = { isError: mode === 'error', content: [block(mode === 'error' ? 'Engine is offline' : 'Batch status: 456 tokens')] }
+      return { results: mode === 'missing' ? [{ callId: 'unrelated', result }] : mode === 'duplicate' ? [{ callId: id, result }, { callId: id, result }] : [{ callId: id, result }], additionalContexts: [], concluded: false }
+    },
+  }
+  const before = f.session.snapshotEvents()
+  const result = await f.manager.acpStatus(f.agent, signal())
+  assert.match(result.text, /456 tokens/)
+  assert.equal(call.agent, f.agent)
+  assert.equal(call.calls.length, 1)
+  assert.equal(call.calls[0].name, 'acp_status')
+  assert.equal(call.calls[0].type, 'tool-call')
+  assert.deepEqual(JSON.parse(call.calls[0].arguments), {})
+  assert.equal(call.log, undefined)
+  mode = 'error'
+  await assert.rejects(f.manager.acpStatus(f.agent, signal()), /Engine is offline/)
+  for (mode of ['missing', 'duplicate']) await assert.rejects(f.manager.acpStatus(f.agent, signal()), /unique matching status result/)
+  mode = 'cancel'; controller = new AbortController()
+  await assert.rejects(f.manager.acpStatus(f.agent, controller.signal), /abort/i)
+  assert.deepEqual(f.session.snapshotEvents(), before)
+})
