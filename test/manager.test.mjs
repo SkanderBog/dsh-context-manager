@@ -696,6 +696,8 @@ test('ACP status uses the selected batch executor on newer Harness without addin
     async execute(input) {
       call = input
       const id = input.calls[0].id
+      if (mode === 'null') return null
+      if (mode === 'malformed') return { results: {} }
       if (mode === 'cancel') controller.abort()
       const result = { isError: mode === 'error', content: [block(mode === 'error' ? 'Engine is offline' : 'Batch status: 456 tokens')] }
       return { results: mode === 'missing' ? [{ callId: 'unrelated', result }] : mode === 'duplicate' ? [{ callId: id, result }, { callId: id, result }] : [{ callId: id, result }], additionalContexts: [], concluded: false }
@@ -712,7 +714,7 @@ test('ACP status uses the selected batch executor on newer Harness without addin
   assert.equal(call.log, undefined)
   mode = 'error'
   await assert.rejects(f.manager.acpStatus(f.agent, signal()), /Engine is offline/)
-  for (mode of ['missing', 'duplicate']) await assert.rejects(f.manager.acpStatus(f.agent, signal()), /unique matching status result/)
+  for (mode of ['missing', 'duplicate', 'null', 'malformed']) await assert.rejects(f.manager.acpStatus(f.agent, signal()), /unique matching status result/)
   mode = 'cancel'; controller = new AbortController()
   await assert.rejects(f.manager.acpStatus(f.agent, controller.signal), /abort/i)
   assert.deepEqual(f.session.snapshotEvents(), before)

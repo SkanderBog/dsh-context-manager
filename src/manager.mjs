@@ -162,7 +162,7 @@ export class ContextManager {
       // Harness 0.2.2 delegates batches to the selected executor. Omitting log
       // keeps this explicit status request outside the model's active history.
       const batch = await tools.execute({ calls: [{ type: 'tool-call', id: callId, name: 'acp_status', arguments: '{}' }], agent, signal: operationSignal })
-      const matches = batch.results?.filter(item => item.callId === callId) ?? []
+      const matches = Array.isArray(batch?.results) ? batch.results.filter(item => item?.callId === callId) : []
       if (matches.length !== 1) throw new Error('The context engine returned no unique matching status result.')
       result = matches[0].result
     } else {
