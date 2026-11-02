@@ -51,6 +51,8 @@ Model adapters can require reasoning signatures and complete tool-call/result pa
 
 Summary input is a fresh, tool-free text transcript. It excludes reasoning, labels document content as data, and asks the model to preserve goals, decisions, constraints, verified results, paths, and unresolved work. As with any model summary, details may be lost or misrepresented: review the preview before applying.
 
+A summary is accepted only after an explicit successful stream finish. Interrupted or truncated responses cannot become previews. Model failures show the provider's error code and message so account access, unsupported models, and output limits can be diagnosed; they leave active history unchanged and are not automatically retried.
+
 ## Files, PDFs, images, and original history
 
 - Tool output includes text returned by file readers, PDF plugins, terminal commands, and other tools. The output option applies to all recorded tool output; it does not infer which text came from a PDF.

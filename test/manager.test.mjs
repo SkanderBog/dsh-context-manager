@@ -73,7 +73,7 @@ async function fixture(t, options = {}) {
     if (options.throwStream) throw new Error('provider unavailable')
     yield { type: 'block-end', index: 0, block: block(options.summary ?? 'Keep the decisions and exact path /workspace/notes.txt. Next: continue the latest request.') }
     if (options.usage) yield { type: 'usage', usage: options.usage }
-    yield { type: 'finish', reason: { kind: options.finish ?? 'stop' } }
+    if (options.finish !== null) yield { type: 'finish', reason: typeof options.finish === 'object' ? options.finish : { kind: options.finish ?? 'stop' } }
   } }
   let active = false
   const maintenanceController = new AbortController()
@@ -620,4 +620,34 @@ test('retained output and notes are checked together before a paid summary', asy
   assert.equal(f.calls.length, 0)
   assert.equal(f.manager.plans.size, 0)
   assert.deepEqual(f.session.snapshotEvents(), before)
+})
+
+test('normalized model failures retain actionable diagnostics without leaking raw provider metadata', async t => {
+  for (const kind of ['error', 'aborted']) {
+    await t.test(kind, async t => {
+      const f = await fixture(t, { finish: { kind, failure: { code: 'MODEL_NOT_AVAILABLE', message: 'This account model is no longer offered. Refresh the model catalog.', requestId: 'PRIVATE_PROVIDER_METADATA' } } })
+      const before = f.session.snapshotEvents()
+      await assert.rejects(f.manager.preview(f.agent, f.selection(), signal()), error => {
+        assert.match(error.message, /MODEL_NOT_AVAILABLE: This account model is no longer offered/)
+        assert.match(error.message, /Context is unchanged/)
+        assert(!error.message.includes('PRIVATE_PROVIDER_METADATA'))
+        return true
+      })
+      assert.equal(f.calls.length, 1, 'Failed previews must not retry paid model requests')
+      assert.equal(f.manager.plans.size, 0)
+      assert.deepEqual(f.session.snapshotEvents(), before)
+    })
+  }
+})
+
+test('truncated and unterminated model streams explain the failure and cannot publish previews', async t => {
+  for (const finish of ['max-tokens', null]) {
+    await t.test(String(finish), async t => {
+      const f = await fixture(t, { finish })
+      const before = f.session.snapshotEvents()
+      await assert.rejects(f.manager.preview(f.agent, f.selection(), signal()), finish ? /reached its output limit/ : /no finish/)
+      assert.equal(f.manager.plans.size, 0)
+      assert.deepEqual(f.session.snapshotEvents(), before)
+    })
+  }
 })

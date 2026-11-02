@@ -15,6 +15,15 @@ const digest = value => createHash('sha256').update(JSON.stringify(value)).diges
 const sum = (items, key) => items.reduce((n, item) => n + item[key], 0)
 const isHarnessContext = message => message.role === 'user' && ['instructions', 'catalog', 'snapshot'].includes(message.source.form)
 
+function assertSummaryFinished(finish) {
+  if (finish?.kind === 'stop') return
+  const failure = finish?.failure
+  const detail = typeof failure?.message === 'string' ? failure.message.slice(0, 2000) : ''
+  const code = typeof failure?.code === 'string' ? failure.code.slice(0, 128) : ''
+  const advice = finish?.kind === 'max-tokens' ? 'The summary reached its output limit. Try a smaller range or a less reasoning-intensive summary model.' : ''
+  throw new Error([`Summary did not finish normally (${finish?.kind ?? 'no finish'}).`, code || detail ? `${code ? `${code}: ` : ''}${detail}` : '', advice, 'Context is unchanged.'].filter(Boolean).join(' '))
+}
+
 /** Fingerprint model-visible data, including projected content and the routed request. */
 export function fingerprint(session) {
   return digest({ header: session.requestHeader(), route: session.requestContext(), messages: session.surface.nodes.map(seq => [seq, session.deriveEventMessage(session.eventAt(seq))]) })
@@ -216,6 +225,7 @@ export class ContextManager {
           const transcript = transcripts.get(span)
           transcripts.delete(span)
           const assembler = new BlockAssembler()
+          let finish
           const options = {
             provider: target.provider, model: target.model, maxTokens: 2048,
             sessionId: session.id, purpose: 'compaction', signal: operationSignal,
@@ -224,9 +234,15 @@ export class ContextManager {
               { role: 'user', content: [textBlock(JSON.stringify({ transcript }))] },
             ],
           }
-          for await (const chunk of this.ctx.llm.stream(options)) { operationSignal.throwIfAborted(); assembler.push(chunk) }
+          for await (const chunk of this.ctx.llm.stream(options)) {
+            operationSignal.throwIfAborted()
+            if (chunk.type === 'finish') finish = chunk.reason
+            assembler.push(chunk)
+          }
           operationSignal.throwIfAborted()
-          if (!assembler.finish || assembler.finish.kind !== 'stop') throw new Error(`Summary did not finish normally (${assembler.finish?.kind ?? 'no finish'}). Context is unchanged.`)
+          // BlockAssembler defaults finish to stop; only a real terminal chunk
+          // establishes that an interrupted transport produced a complete summary.
+          assertSummaryFinished(finish)
           const rawOutput = assembler.blocks()
           summary = rawOutput.filter(b => b.type === 'text').map(b => b.text).join('\n').trim()
           if (!summary) throw new Error('The model returned no summary. Context is unchanged.')
