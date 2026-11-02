@@ -13,6 +13,117 @@ const { createRoot } = require('react-dom/client')
 const { act } = React
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
+async function clientHarness(t, execute, { strict = false } = {}) {
+  const dom = new JSDOM('<!doctype html><html><head></head><body><main></main></body></html>', { url: 'http://localhost' })
+  const saved = new Map()
+  for (const name of ['window', 'document', 'HTMLElement', 'HTMLInputElement', 'Event', 'MouseEvent']) { saved.set(name, globalThis[name]); globalThis[name] = dom.window[name] }
+  dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true }
+  let plugin
+  const components = new Map(), cleanups = []
+  vm.runInNewContext(await readFile(process.env.DSH_CONTEXT_CLIENT_ENTRY ?? new URL('../src/client.js', import.meta.url), 'utf8'), {
+    window: { __ModuleLoader__: { load: entry => { plugin = entry.factory(require) } } },
+    document, Intl, AbortController, Map, JSON, Math, setTimeout, clearTimeout,
+  })
+  plugin.apply({
+    remote: { commands: { async execute(sessionId, line, _attachments, signal) {
+      const value = await execute(JSON.parse(line.slice('/context-manager '.length)), signal, sessionId)
+      return { ok: true, value: { result: { kind: 'success', text: JSON.stringify(value) } } }
+    } } },
+    slots: { inject(_name, callback) { return callback() }, register(entry, component) { components.set(entry.name, component); return () => {} } },
+    commandUi: { decorate() { return () => {} } },
+    effect(generator) { for (const cleanup of generator()) cleanups.push(cleanup) },
+  })
+  const root = createRoot(document.querySelector('main'))
+  t.after(async () => { await act(async () => root.unmount()); for (const cleanup of cleanups.reverse()) cleanup(); dom.window.close(); for (const [key, value] of saved) globalThis[key] = value })
+  const Header = components.get('conversation.session.header.actions')
+  const render = async pressure => act(async () => root.render(React.createElement(strict ? React.StrictMode : React.Fragment, null,
+    React.createElement(Header, { sessionId: 'demo', useProjection: () => pressure }))))
+  await render(null)
+  const button = label => [...document.querySelectorAll('button')].find(element => element.textContent === label)
+  const click = async label => { const element = button(label); assert(element, label); await act(async () => element.click()) }
+  return { click, button, render }
+}
+
+const recoverySnapshot = { fingerprint: 'recovered', totalTokens: 1200, percent: 12, contextWindow: 10000, breakdown: {}, groups: [
+  { id: '1', tokens: 1100, excerpt: 'Older context', locked: false },
+  { id: '2', tokens: 100, excerpt: 'Latest context', locked: true },
+] }
+
+test('initial failure can retry, and cancellation releases a stalled read without letting it overwrite a newer request', async t => {
+  let count = 0
+  const pending = []
+  const { click, button } = await clientHarness(t, async (payload, signal) => {
+    assert.equal(payload.op, 'inspect')
+    if (++count === 1) throw new Error('Host temporarily unavailable')
+    return new Promise(resolve => pending.push({ resolve, signal }))
+  })
+  await click('Context')
+  assert.match(document.querySelector('[role="alert"]').textContent, /Host temporarily unavailable/)
+  await click('Retry loading context')
+  await click('Cancel operation')
+  assert(pending[0].signal.aborted)
+  assert(button('Retry loading context'), 'Cancellation must be recoverable even if the transport never settles')
+  await click('Retry loading context')
+  await act(async () => pending[0].resolve({ ...recoverySnapshot, totalTokens: 9999 }))
+  assert.equal(document.querySelector('.dcm-body').getAttribute('aria-busy'), 'true', 'A cancelled read cannot clear a newer operation')
+  assert(!document.body.textContent.includes('9,999'))
+  await act(async () => pending[1].resolve(recoverySnapshot))
+  assert.match(document.body.textContent, /Local context: ~1,200/)
+  assert.equal(document.querySelector('[role="alert"]'), null)
+  assert.equal(document.querySelector('.dcm-body').getAttribute('aria-busy'), 'false')
+})
+
+test('React effect replay cancels and replaces the initial read', async t => {
+  const pending = []
+  const { click } = await clientHarness(t, async (_payload, signal) => new Promise(resolve => pending.push({ resolve, signal })), { strict: true })
+  await click('Context')
+  assert.equal(pending.length, 2, 'The remounted effect must start a fresh read')
+  assert(pending[0].signal.aborted)
+  assert(!pending[1].signal.aborted)
+  await act(async () => pending[0].resolve({ ...recoverySnapshot, totalTokens: 9999 }))
+  assert.equal(document.querySelector('.dcm-body').getAttribute('aria-busy'), 'true')
+  await act(async () => pending[1].resolve(recoverySnapshot))
+  assert.match(document.body.textContent, /Local context: ~1,200/)
+  assert.equal(document.querySelector('[role="alert"]'), null)
+})
+
+test('a cancelled preview is discarded after a newer preview starts without resetting its busy state', async t => {
+  const pending = [], discarded = []
+  const { click, button } = await clientHarness(t, async (payload, signal) => {
+    if (payload.op === 'inspect') return recoverySnapshot
+    if (payload.op === 'preview') return new Promise(resolve => pending.push({ resolve, signal }))
+    if (payload.op === 'discard') { discarded.push(payload.id); return {} }
+    assert.fail(`Unexpected operation ${payload.op}`)
+  })
+  const plan = id => ({ id, expires: Date.now() + 600000, before: 1200, after: 500, replacements: [{ seqs: [1], before: 1100, after: 400, action: 'summarize', summary: id }] })
+  await click('Context')
+  await click('Summarize older groups')
+  await click('Generate preview')
+  await click('Cancel operation')
+  assert(!button('Generate preview').disabled)
+  await click('Generate preview')
+  await act(async () => pending[0].resolve(plan('cancelled-preview')))
+  assert.deepEqual(discarded, ['cancelled-preview'])
+  assert.equal(document.querySelector('.dcm-body').getAttribute('aria-busy'), 'true')
+  assert.equal(document.querySelector('[aria-label="Compaction preview"]'), null)
+  assert(button('Generate preview').disabled)
+  await act(async () => pending[1].resolve(plan('current-preview')))
+  assert.match(document.querySelector('[aria-label="Compaction preview"]').textContent, /current-preview/)
+  assert.equal(document.querySelector('[role="alert"]'), null)
+})
+
+test('header hides unavailable or invalid model pressure while preserving projected token estimates', async t => {
+  const { render } = await clientHarness(t, async () => recoverySnapshot)
+  for (const pressure of [null, {}, { pressureTokens: null, contextWindow: 10000 }, { pressureTokens: NaN, contextWindow: 10000 }, { pressureTokens: 1200, contextWindow: Infinity }, { pressureTokens: 1200, contextWindow: 0 }, { pressureTokens: -1, contextWindow: 10000 }]) {
+    await render(pressure)
+    assert.equal(document.querySelector('button').textContent, 'Context')
+  }
+  await render({ projectedTokens: 2000, pressureTokens: 9000, contextWindow: 10000 })
+  assert.equal(document.querySelector('button').textContent, 'Context ~20%')
+  await render({ pressureTokens: 0, contextWindow: 10000 })
+  assert.equal(document.querySelector('button').textContent, 'Context ~0%')
+})
+
 test('Context panel requires a reviewed preview, consumes failed apply, and refreshes successful apply', async t => {
   const dom = new JSDOM('<!doctype html><html><head></head><body><main></main></body></html>', { url: 'http://localhost' })
   const saved = new Map()
@@ -101,9 +212,11 @@ test('Context panel requires a reviewed preview, consumes failed apply, and refr
   await click('Generate preview')
   await act(async () => document.querySelector('input[type="checkbox"]').click())
   failApply = false
+  document.querySelector('.dcm-body').scrollTop = 500
   await click('Apply preview')
   assert.match(document.body.textContent, /Original messages remain/)
   assert.match(document.body.textContent, /1,000 tokens/)
+  assert.equal(document.querySelector('.dcm-body').scrollTop, 0, 'Applying reveals the refreshed totals and confirmation at the top')
   assert.equal(commands.filter(c => c.op === 'apply').length, 2)
   await click('Summarize older groups')
   delayPreview = true
