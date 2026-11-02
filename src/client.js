@@ -20,6 +20,7 @@ window.__ModuleLoader__.load({
 
     function ContextPanel({ ctx, sessionId, close, updateMeter }) {
       const dialog = useRef(null)
+      const body = useRef(null)
       const abort = useRef(null)
       const mounted = useRef(true)
       const currentPlan = useRef(null)
@@ -96,6 +97,11 @@ window.__ModuleLoader__.load({
         reviewInput.current?.scrollIntoView?.({ block: 'nearest' })
       }, [plan, busy])
       useEffect(() => {
+        // Applying removes the preview near the end of the panel. Show the
+        // refreshed totals and confirmation instead of retaining that scroll.
+        if (snapshot && body.current) body.current.scrollTop = 0
+      }, [snapshot])
+      useEffect(() => {
         if (!plan) return
         const timer = setTimeout(() => {
           if (currentPlan.current !== plan) return
@@ -149,7 +155,7 @@ window.__ModuleLoader__.load({
       const usageLabel = usage => !usage ? 'Usage not reported' : usage.inputTokens === null ? 'Token usage not reported by the provider' : `${format(usage.inputTokens)} input + ${format(usage.outputTokens)} output tokens`
       return createPortal(h('dialog', { ref: dialog, className: 'dcm', 'aria-labelledby': 'dcm-title', onCancel: event => { event.preventDefault(); if (!busy.startsWith('Applying')) close() } },
         h('header', null, h('div', null, h('h2', { id: 'dcm-title' }, 'Context manager'), h('div', { className: 'dcm-muted' }, 'Choose what the model carries into its next reply.')), h('button', { onClick: close, disabled: busy.startsWith('Applying'), 'aria-label': 'Close context manager' }, 'Close')),
-        h('div', { className: 'dcm-body', 'aria-busy': !!busy },
+        h('div', { ref: body, className: 'dcm-body', 'aria-busy': !!busy },
           error && h('div', { className: 'dcm-error', role: 'alert' }, error),
           notice && h('div', { className: 'dcm-success', role: 'status' }, notice),
           busy && h('p', { role: 'status' }, busy),

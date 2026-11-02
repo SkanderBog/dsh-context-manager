@@ -212,9 +212,11 @@ test('Context panel requires a reviewed preview, consumes failed apply, and refr
   await click('Generate preview')
   await act(async () => document.querySelector('input[type="checkbox"]').click())
   failApply = false
+  document.querySelector('.dcm-body').scrollTop = 500
   await click('Apply preview')
   assert.match(document.body.textContent, /Original messages remain/)
   assert.match(document.body.textContent, /1,000 tokens/)
+  assert.equal(document.querySelector('.dcm-body').scrollTop, 0, 'Applying reveals the refreshed totals and confirmation at the top')
   assert.equal(commands.filter(c => c.op === 'apply').length, 2)
   await click('Summarize older groups')
   delayPreview = true
