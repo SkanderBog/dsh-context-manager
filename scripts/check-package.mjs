@@ -17,6 +17,7 @@ try {
     'lib/index.mjs',
     'package.json',
     'src/client.js',
+    'src/compat.mjs',
     'src/index.mjs',
     'src/inspection.mjs',
     'src/manager.mjs',

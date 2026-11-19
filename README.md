@@ -125,7 +125,7 @@ The profile must already contain Rewind, Better Sidebar and DSH Market. The scri
 
 ### Compatibility and resource checks
 
-The November 2 API checks include current Harness `0.2.1-rc.5`, pinned by community Desktop `v0.30.0`, and upcoming `0.2.2-alpha.2`. On the alpha host, external ACP status dispatch uses the selected batch executor and matches its returned call ID; older hosts retain the single-call API. Provider-owned tool policy remains in the execution path. An alpha profile must mount an executor as required by Harness itself.
+The November 2 API checks include current Harness `0.2.1-rc.5`, pinned by community Desktop `v0.30.0`, and upcoming `0.2.2-alpha.2`. The 2026-11-19 audit added `0.2.2-rc.2` (pinned by Desktop `v0.31.7`) and `0.2.2-rc.5` (current core) lanes with Cordis `4.1.0`. On the alpha host, external ACP status dispatch uses the selected batch executor and matches its returned call ID; older hosts retain the single-call API. Provider-owned tool policy remains in the execution path. An alpha profile must mount an executor as required by Harness itself.
 
 Current model IDs and reasoning controls come from the routed request and owning adapter. The summary preserves an explicitly selected opaque effort while keeping its own 2,048-token output budget. The model probe tests the real DeepSeek request serializer and SSE parser with controlled responses; it performs no paid account calls and does not certify remote summary quality. CI runs this probe against the extracted archive on current rc.5 and alpha.2.
 
@@ -133,12 +133,14 @@ All selected summary ranges are checked against the transcript limit before the 
 
 The same preflight checks every omission marker and each summary's retained output text, reviewed notes, and checkpoint framing. If that required text already prevents any context savings, the entire preview is rejected before making a model request, including when the invalid range comes after another selected summary. A generated summary can still be too long; that is checked again before offering a preview.
 
-CI tests packed host and browser artifacts on Linux, macOS and Windows. The pinned baseline is Harness `0.2.0-rc.2`; additional Linux/Node 24 lanes exercise `0.2.1-alpha.1`, `0.2.1-alpha.2`, `0.2.1-rc.2`, `0.2.1-rc.5`, and `0.2.2-alpha.2` without changing the release dependency pins. These are plugin/runtime checks, not packaged desktop GUI tests.
+CI tests packed host and browser artifacts on Linux, macOS and Windows. The pinned baseline is Harness `0.2.0-rc.2`; additional Linux/Node 24 lanes exercise `0.2.1-alpha.1`, `0.2.1-alpha.2`, `0.2.1-rc.2`, `0.2.1-rc.5`, `0.2.2-alpha.2`, `0.2.2-rc.2` and `0.2.2-rc.5` without changing the release dependency pins. These are plugin/runtime checks, not packaged desktop GUI tests.
+
+At load, `apply()` checks the injected services and every session surface this release reads (`nodes`, `contentGeneration`, `deriveEventMessage`, `eventAt`, `requestHeader`, `requestContext`). A missing member fails with `DSH_CONTEXT_INCOMPATIBLE_HOST` naming it, instead of surfacing as a `TypeError` inside a command handler later.
 
 
 ## Store compatibility and permissions
 
-The manifest includes the Store-specific `dsh.compatibility` matrix as well as the host's `engines.dsh` gate. Packed API tests pass on DSH `0.2.0-rc.2`, `0.2.1-alpha.1`, `0.2.1-alpha.2`, `0.2.1-rc.2`, `0.2.1-rc.5`, and `0.2.2-alpha.2`. Linux, macOS and Windows packed-plugin tests exercise host and browser contracts, not packaged desktop GUIs. Web/desktop profiles need the stated conversation and command client modules; headless profiles expose only the command.
+The manifest includes the Store-specific `dsh.compatibility` matrix as well as the host's `engines.dsh` gate. Packed API tests pass on DSH `0.2.0-rc.2`, `0.2.1-alpha.1`, `0.2.1-alpha.2`, `0.2.1-rc.2`, `0.2.1-rc.5`, `0.2.2-alpha.2`, `0.2.2-rc.2` and `0.2.2-rc.5`. Linux, macOS and Windows packed-plugin tests exercise host and browser contracts, not packaged desktop GUIs. Web/desktop profiles need the stated conversation and command client modules; headless profiles expose only the command.
 
 | Capability | Scope |
 | --- | --- |
