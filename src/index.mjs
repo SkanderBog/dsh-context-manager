@@ -1,3 +1,4 @@
+import { assertHostSurface, assertSessionSurface } from './compat.mjs'
 import { ContextManager } from './manager.mjs'
 export { ContextManager, fingerprint } from './manager.mjs'
 
@@ -6,6 +7,7 @@ export const inject = ['commands', 'sessions', 'tokenMeter', 'llm']
 
 /** Register the human-only command; the model never receives these control requests. */
 export function apply(ctx) {
+  assertHostSurface(ctx)
   const manager = new ContextManager(ctx)
   const lifecycle = new AbortController()
   const pending = new Set()
@@ -22,6 +24,7 @@ export function apply(ctx) {
             if (!raw) return { kind: 'success', text: 'Use the Context button beside the conversation title to inspect, preview, and compact history.' }
             if (raw.length > 100_000) throw new Error('Context control request is too large.')
             const request = JSON.parse(raw)
+            assertSessionSurface(invocation.agent?.session)
             const signal = AbortSignal.any([invocation.signal, lifecycle.signal])
             let result
             switch (request.op) {
