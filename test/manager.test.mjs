@@ -6,7 +6,10 @@ import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import { createRequire } from 'node:module'
 const compactionPackage = createRequire(import.meta.url)('@deepseek-ai/dsh-compaction/package.json')
-const invariantPlugins = compactionPackage.exports['./invariant']
+const invariantsAvailable = (() => {
+  try { createRequire(import.meta.url).resolve('@deepseek-ai/dsh-invariants'); return true } catch { return false }
+})()
+const invariantPlugins = compactionPackage.exports['./invariant'] && invariantsAvailable
   ? [(await import('@deepseek-ai/dsh-invariants')).default, await import('@deepseek-ai/dsh-compaction/invariant')]
   : []
 import AgentRegistry from '@deepseek-ai/dsh-agent'
