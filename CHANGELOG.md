@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2 — 2026-11-20
+
+- Validate control payloads before they reach the manager: known operation, safe-integer cursors and positions, bounded ids, `choices`/`outputs` enums, and reviewed-note shape/limits.
+- Probe the injected host services and every session surface at load time; report `DSH_CONTEXT_INCOMPATIBLE_HOST` with the missing members instead of a handler `TypeError`.
+- Add Harness `0.2.2-rc.2` and `0.2.2-rc.5` lanes with Cordis `4.1.0`, and record both in the Store compatibility matrix.
+
 ## 0.2.1 — 2026-11-02
 
 - Preflight omission markers and retained output/notes before any paid summary; reject incomplete streams without an explicit successful finish.

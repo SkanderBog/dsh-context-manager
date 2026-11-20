@@ -66,10 +66,10 @@ The context total uses Harness's token meter. Category estimates use its fixed t
 
 ## Install a packaged release
 
-Download the archive from [v0.2.1](https://github.com/SkanderBog/dsh-context-manager/releases/tag/v0.2.1).
+Download the archive from [v0.2.2](https://github.com/SkanderBog/dsh-context-manager/releases/tag/v0.2.2).
 
 ```sh
-dsh plugin --profile tauri add /absolute/path/dsh-context-manager-0.2.1.tgz
+dsh plugin --profile tauri add /absolute/path/dsh-context-manager-0.2.2.tgz
 ```
 
 Use your actual Harness profile name. The community Linux desktop uses `tauri` on the tested installation. Other Harness desktop distributions may use `desktop`; quit that desktop before changing its reserved profile. Restart Harness after updating the plugin: reloading the frontend or toggling a component can leave the previously imported host module cached.
