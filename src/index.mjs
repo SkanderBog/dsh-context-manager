@@ -1,5 +1,6 @@
 import { assertHostSurface, assertSessionSurface } from './compat.mjs'
 import { ContextManager } from './manager.mjs'
+import { parseRequest } from './request.mjs'
 export { ContextManager, fingerprint } from './manager.mjs'
 
 export const name = 'dsh-context-manager'
@@ -22,8 +23,7 @@ export function apply(ctx) {
           try {
             const raw = invocation.rawInput.trim()
             if (!raw) return { kind: 'success', text: 'Use the Context button beside the conversation title to inspect, preview, and compact history.' }
-            if (raw.length > 100_000) throw new Error('Context control request is too large.')
-            const request = JSON.parse(raw)
+            const request = parseRequest(raw)
             assertSessionSurface(invocation.agent?.session)
             const signal = AbortSignal.any([invocation.signal, lifecycle.signal])
             let result

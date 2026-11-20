@@ -22,6 +22,7 @@ try {
     'src/inspection.mjs',
     'src/manager.mjs',
     'src/notes.mjs',
+    'src/request.mjs',
   ])
   execFileSync('tar', ['-xzf', join(directory, packed.filename), '-C', directory])
   const result = spawnSync(process.execPath, ['test/all.mjs'], {
